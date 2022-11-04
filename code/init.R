@@ -1,12 +1,14 @@
 ########################################################################################################################
-# Packages
+# Libraries
 ########################################################################################################################
 
-box::use(
-    plt = ggplot2,
-    dplyr = dplyr[filter, select],
-    # stats[st_filter = filter, ...]
-)
+library(tidyverse)
+
+# box::use(
+#     plt = ggplot2,
+#     dplyr = dplyr[filter, select],
+#     # stats[st_filter = filter, ...]
+# )
 
 ########################################################################################################################
 # Parameter
@@ -24,7 +26,7 @@ N_JOBS = 4
 #pd.set_option('display.max_columns', 20)
 
 # Plot
-theme_my <- plt$theme_bw() + plt$theme(plot.title = plt$element_text(hjust = 0.5))
+theme_my <- theme_bw() + theme(plot.title = element_text(hjust = 0.5))
 
 # Colors
 COLORTWO <- c("darkgreen", "red")

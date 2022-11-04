@@ -5,18 +5,18 @@
 rm(list = ls())
 
 
-# --- Libraries --------------------------------------------------------------------------------------------------------
+# --- Libraries, settings, functions -----------------------------------------------------------------------------------
 
 library(tidyverse)
-library(lubridate)
-library(gridExtra)
+source("./code/init.R")
+source("./code/utils_plots.R")
 
 # Custom
-options(box.path = getwd())
-box::use(
-  init = ./init,
-  up = ./utils_plots, # box::reload(up)
-)
+# options(box.path = getwd())
+# box::use(
+#   init = ./init,
+#   up = ./utils_plots, # box::reload(up)
+# )
 
 
 # --- Parameter --------------------------------------------------------------------------------------------------------
@@ -44,19 +44,19 @@ TOOMANY_THRESHOLD = 5
 # --- Read data and adapt  ---------------------------------------------------------------------------------------------
 
 # Read data and adapt to be more readable
-df_orig = read_csv(paste0(init$DATALOC, "hour.csv")) %>%
+df_orig = read_csv(paste0(DATALOC, "hour.csv")) %>%
   mutate(season = recode(season, "1" = "1_winter", "2" = "2_spring", "3" = "3_summer", "4" = "4_fall"),         
          yr = recode(yr, "0" = "2011", "1" = "2012"),
          workingday = recode(workingday, "0" = "No", "1" = "Yes"),
          weathersit = recode(weathersit, "1" = "1_clear", "2" = "2_misty", "3" = "3_light rain",
                                          "4" = "4_heavy rain")) %>% 
-  mutate(weekday = str_c(as.character(weekday), str_sub(wday(dteday, label = TRUE), 1, 3), sep = "_"),
+  mutate(weekday = str_c(as.character(weekday), str_sub(lubridate::wday(dteday, label = TRUE), 1, 3), sep = "_"),
          mnth = str_pad(as.character(mnth), 2, pad = "0"),
          hr = str_pad(as.character(hr), 2, pad = "0")) %>% 
   mutate(temp = temp * 47 - 8,
          atemp = atemp * 66 - 16,
          windspeed = windspeed * 67) %>%
-  mutate(kaggle_fold = if_else(day(dteday) >= 20, "test", "train"))
+  mutate(kaggle_fold = if_else(lubridate::day(dteday) >= 20, "test", "train"))
 
 # Create some artifacts helping to illustrate important concepts
 set.seed(42)
@@ -80,7 +80,7 @@ df_orig = df_orig %>%
 skip = function() {
   
   map_chr(df_orig, class)
-  df_orig %>% mutate(across(where(is.character), as.factor))  %>% summary()
+  df_orig %>% my_summary()
   
   par(mfrow = c(1, 3))
   hist(df_orig$cnt, breaks = 50)
@@ -93,17 +93,17 @@ skip = function() {
 }
 
 # "Save" orignial data
-write_csv(df_orig, paste0(init$DATALOC, "df_orig.csv"))
+write_csv(df_orig, paste0(DATALOC, "df_orig.csv"))
 df = df_orig
 
 
 # --- Get metadata information -----------------------------------------------------------------------------------------
 
-df_meta = readxl::read_excel(paste0(init$DATALOC, "datamodel_bikeshare.xlsx"), skip = 1)
+df_meta = readxl::read_excel(paste0(DATALOC, "datamodel_bikeshare.xlsx"), skip = 1)
 
 # Check difference of metainfo to data
 setdiff(colnames(df), df_meta$variable)
-setdiff(df_meta %>% filter(category == "orig") %>% .$variable, colnames(df))
+setdiff(df_meta %>% filter(category == "orig") %>% pull("variable"), colnames(df))
 
 # Subset on data that is "ready" to get processed
 df_meta_sub = df_meta %>% filter(status %in% c("ready"))
@@ -111,7 +111,7 @@ df_meta_sub = df_meta %>% filter(status %in% c("ready"))
 
 # Feature engineering -------------------------------------------------------------------------------------------------
 
-df$day_of_month = str_pad(day(df$dteday), 2, pad = "0")
+df$day_of_month = str_pad(lubridate::day(df$dteday), 2, pad = "0")
 
 # Check metadata again
 setdiff(df_meta_sub$variable, colnames(df))
@@ -132,9 +132,9 @@ summary(as.factor(df$fold))
 
 # --- Define numeric features ------------------------------------------------------------------------------------------
 
-nume = df_meta_sub %>% filter(type == "nume")  %>% .$variable
+nume = df_meta_sub %>% filter(type == "nume")  %>% pull("variable")
 df[nume] = map(df[nume], ~ as.numeric(.))
-summary(df[nume])
+my_summary(df[nume])
 
 
 # --- Missings + Outliers + Skewness -----------------------------------------------------------------------------------
@@ -146,22 +146,52 @@ sort(misspct, TRUE)
 nume = setdiff(nume, remove)
 
 # Plot untransformed features -> check for outliers and skewness
-summary(df[nume])
+my_summary(df[nume])
 start = Sys.time()
 if (PLOT) {
   plots = map(nume, 
-              ~ up$get_plot_nume_CLASS(df[c(., "cnt_CLASS")], 
+              ~ plot_nume_CLASS(df[c(., "cnt_CLASS")], 
                                        feature_name = .x, 
                                        target_name = "cnt_CLASS", 
                                        title = .x
   ))
-  ggsave(paste0(init$PLOTLOC, "distr_nume.pdf"), 
-         up$arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+  ggsave(paste0(PLOTLOC, "distr_nume.pdf"), 
+         arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
 }
 print(Sys.time() - start)
 
+
+
+feature_name = "temp"
+target_name = "cnt_REGR"
+title = NULL
+
+df_plot = df[c(feature_name, target_name)]
+summary(df_plot)
+ggplot(data = df_plot, 
+       aes_string(x = feature_name, 
+                  y = target_name)) +
+  geom_hex(bins = 100) + 
+  #scale_fill_gradientn(colors = colorRampPalette(c("white", "blue", "yellow", "red"))(100)) +
+  geom_smooth(color = "black", level = 0.95, size = 0.5) +
+  labs(title = if (is.null(title)) feature_name else title)
+
+p = ggplot(data = df_plot, 
+           aes_string(x = feature_name)) +
+  geom_histogram(aes_string(y = "..density..",
+                            fill = target_name, 
+                            color = target_name),
+                 bins = n_bins, 
+                 position = "identity") +
+  geom_density(aes_string(color = target_name)) +
+  scale_fill_manual(values = alpha(color, .4), name = target_name) + 
+  scale_color_manual(values = color, name = target_name) +
+  theme_my +
+  #guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE))
+  labs(title = title)
+
 # Winsorize
-df[nume] = map_df(df[nume], ~ up$winsorize(., 0.01, 0.99))
+df[nume] = map_df(df[nume], ~ winsorize(., 0.01, 0.99))
 
 # Log-Transform
 tolog = c("hum")
@@ -178,7 +208,7 @@ df[nume_binned] = map_df(df[nume], ~ {
 
 # Convert missings to own level ("(Missing)")
 df[nume_binned] = map_df(df[nume_binned], ~ replace_na(., "(Missing)"))  # fct_explicit_na
-summary(map_df(df[nume_binned], ~ as.factor(.)))
+my_summary(df[nume_binned])
 
 # Get binned variables with just 1 bin (removed later)
 (onebin = nume_binned[map_lgl(df[nume_binned], ~ length(unique(.)) == 1)])
@@ -218,76 +248,12 @@ nume = setdiff(nume, "xxx")
 
 # Remove highly/perfectly correlated (the ones with less NA!)
 # Plot correlation
-#get_plot_corr(df, method, absolute=True, cutoff=None):
-  df_tmp = df[nume]
-  method = "spearman"
-  absolute = TRUE
-  cutoff = 0.1
-  # Check for mixed types
-  
-  count_numeric_types = sum(map_lgl(df_tmp, ~ is.numeric(.x)))
-  if (!(count_numeric_types %in% c(0, dim(df_tmp)[2]))) {stop("Mixed types")}
-  
-  # Nume case
-  if (count_numeric_types != 0) {
-    if (!(method %in% c("pearson", "spearman"))) {stop("False method for numeric values: Choose pearson or spearman")}
-    df_corr = as_tibble(cor(df_tmp, method = method, use = "pairwise.complete.obs"))
-    suffix = paste0(" (", map_chr(df_tmp, ~ as.character(round(mean(is.na(.)) * 100, 1))), " %NA)")
-  }
-  '
-  # Cate case
-  else:
-  '
-  
-  # Add info to names
-  colnames(df_tmp) = paste0(colnames(df_tmp), suffix)
-  
-  # Absolute trafo
-  if (absolute) {df_corr = map_df(df_corr, ~ abs(.))}  
-  
-  # Filter out rows or cols below cutoff and then fill diagonal
-  for (i in seq_along(df_corr)) {df_corr[i,i] = 0}
-  if (!is.null(cutoff)) {
-    b_cutoff = map_lgl(df_corr, ~ (max(abs(.)) > cutoff)) %>% as.logical()
-    df_corr = df_corr[b_cutoff, b_cutoff]
-  }
-  for (i in seq_along(df_corr)) {df_corr[i,i] = 1}
-  
-  # Cluster df_corr
-  '
-  tmp_order = linkage(1 - np.triu(df_corr),
-                      method="average", optimal_ordering=False)[:, :2].flatten().astype(int)
-  new_order = df_corr.columns.values[tmp_order[tmp_order < len(df_corr)]]
-  df_corr = df_corr.loc[new_order, new_order]
-  '
-  
-  
-  
-  # Plot
-  sns.heatmap(df_corr, annot=True, fmt=".2f", cmap="Reds" if absolute else "BLues",
-              xticklabels=True, yticklabels=True, ax=ax)
-  ax.set_yticklabels(labels=ax.get_yticklabels(), rotation=0)
-  ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
-  ax.set_title(("Absolute " if absolute else "") + method.upper() + " Correlation" +
-               (" (cutoff: " + str(cutoff) + ")" if cutoff is not None else ""))
-
-  return df_corr
-
-
-
-
-map_lgl(df[nume], ~ is.numeric(.))
-is.numeric()
-m.corr = abs(cor(df.plot[vars], method = tolower(method), use = "pairwise.complete.obs"))
-'
-summary(df[metr])
-plot = get_plot_corr(df, input_type = "metr", vars = metr, missinfo = misspct, cutoff = cutoff)
-ggsave(paste0(plotloc, TYPE, "_corr_metr.pdf"), plot, width = 9, height = 9)
-remove = c("xxx") #put at xxx the variables to remove
-metr = setdiff(metr, remove) #remove
-metr_binned = setdiff(metr_binned, paste0(remove,"_BINNED_")) #keep "binned" version in sync
-'
-
+my_summary(df[nume])
+p = plot_corr(df[nume], method = "spearman", cutoff = 0)
+ggsave(paste0(PLOTLOC, "1__corr_nume.pdf"), p, width = 9, height = 9)
+remove = c("atemp") #put at xxx the variables to remove
+nume = setdiff(nume, remove) #remove
+nume_binned = setdiff(nume_binned, paste0(remove,"_BINNED")) #keep "binned" version in sync
 
 
 # --- Detect data drift (time/fold depedency of features) --------------------------------------------------------------
@@ -328,16 +294,16 @@ summary(df[metr])
 
 # --- Define categorical features --------------------------------------------------------------------------------------
 
-cate = df_meta_sub %>% filter(type == "cate") %>% .$variable
+cate = df_meta_sub %>% filter(type == "cate") %>% pull("variable")
 df[cate] = map(df[cate], ~ as.character(.)) 
-summary(map_df(df[cate], ~ as.factor(.)))
+my_summary(df[cate])
 
 
 # Handling factor values ----------------------------------------------------------------------------------------------
 
 # Map missings to own level
 df[cate] = map_df(df[cate], ~ replace_na(., "(Missing)"))
-summary(map_df(df[cate], ~ as.factor(.)))
+my_summary(df[cate])
 
 # Create ordinal and binary-encoded features
 # ATTENTION: Usually this processing needs special adaption depending on the data
@@ -350,20 +316,17 @@ df[paste0(yesno, "_ENCODED")] = map(df[yesno], ~ as.numeric(recode(., "No" = "0"
 nomi = setdiff(cate, c(ordi, yesno))
 df[paste0(nomi, "_ENCODED")] = 
     map(nomi, ~ (df %>% filter(fold == "util") %>% 
-                    group_by_at(.x) %>% summarise(mean_target = mean(.data[[target]])) %>% 
+                    group_by_at(.x) %>% summarise(mean_target = mean(.data[["cnt_REGR"]])) %>% 
                     ungroup() %>% arrange(desc(mean_target)) %>% 
                     right_join(df[.x] %>% mutate(n = row_number())) %>% 
                     arrange(n) %>% .$mean_target))
 
 
 # Create compact covariates for "too many members" columns 
-topn_toomany = 10
-(levinfo = map_int(df[nomi], ~ length(levels(.))) %>% .[order(., decreasing = TRUE)]) #number of levels
-(toomany = names(levinfo)[which(levinfo > topn_toomany)])
-(toomany = setdiff(toomany, c("xxx"))) #set exception for important variables
-df[paste0(toomany,"_OTHER_")] = map(df[toomany], ~ fct_lump(., topn_toomany, other_level = "_OTHER_")) #collapse
-nomi = map_chr(nomi, ~ ifelse(. %in% toomany, paste0(.,"_OTHER_"), .)) #adapt metadata (keep order)
-summary(df[nomi], topn_toomany + 2)
+(levinfo = map_int(df[nomi], ~ length(unique(.))) %>% .[order(., decreasing = TRUE)]) #number of levels
+(toomany = names(levinfo)[which(levinfo > TOOMANY_THRESHOLD)])
+(toomany = setdiff(toomany, c("hr", "mnth", "weekday"))) #set exception for important variables
+df[toomany] = map(df[toomany], ~ fct_lump(., TOOMANY_THRESHOLD, other_level = "_OTHER_")) #collapse
 
 '
 # Univariate variable importance
@@ -372,7 +335,8 @@ summary(df[nomi], topn_toomany + 2)
 '
 
 
-GO HEEEEEEEEEEEEEEEEERE
+#GO HEEEEEEEEEEEEEEEEERE
+'
 # Check
 plots = suppressMessages(get_plot_distr_nomi(df, nomi, color = color, varimpinfo = varimp_nomi, inner_barplot = TRUE,
                                              min_width = min_width, ylim = ylim))
@@ -442,6 +406,6 @@ setdiff(features_binned, colnames(df))
 # Save image ----------------------------------------------------------------------------------------------------------
 rm(df.orig, plots, plots1, plots2)
 save.image(paste0(TYPE,"_1_explore.rdata"))
-
+'
 
 
