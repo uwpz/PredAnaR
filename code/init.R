@@ -3,6 +3,8 @@
 ########################################################################################################################
 
 library(tidyverse)
+options(dplyr.summarise.inform = FALSE)
+
 
 # box::use(
 #     plt = ggplot2,
@@ -25,11 +27,8 @@ N_JOBS = 4
 #pd.set_option('display.width', 320)
 #pd.set_option('display.max_columns', 20)
 
-# Plot
-theme_my <- theme_bw() + theme(plot.title = element_text(hjust = 0.5))
-
 # Colors
-COLORTWO <- c("darkgreen", "red")
+COLORTWO = c("darkgreen", "red")
 COLORTHREE = c("darkgreen", "yellow", "red")
 COLORMANY = c(
     "#00FF00", "#0000FF", "#FF0000", "#01FFFE", "#FFA6FE", "#FFDB66", "#006401", "#010067", "#95003A",
@@ -41,12 +40,5 @@ COLORMANY = c(
     "#A5FFD2", "#FFB167", "#009BFF", "#E85EBE"
 )
 # barplot(1:length(manycol), col = manycol)
-COLORBLIND = c(
-    "#0173b2", "#de8f05", "#029e73", "#d55e00", "#cc78bc", "#ca9161",
-    "#fbafe4", "#949494", "#ece133", "#56b4e9"
-)
-COLORDEFAULT = c(
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
-    "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
-)
+
 

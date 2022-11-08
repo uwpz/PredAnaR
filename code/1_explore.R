@@ -11,13 +11,6 @@ library(tidyverse)
 source("./code/init.R")
 source("./code/utils_plots.R")
 
-# Custom
-# options(box.path = getwd())
-# box::use(
-#   init = ./init,
-#   up = ./utils_plots, # box::reload(up)
-# )
-
 
 # --- Parameter --------------------------------------------------------------------------------------------------------
 
@@ -29,13 +22,7 @@ TARGET_TYPES = c("REGR", "CLASS", "MULTICLASS")
 MISSPCT_THRESHOLD = 0.95
 VARPERF_THRESHOLD_DATADRIFT = 0.53
 TOOMANY_THRESHOLD = 5
-'
-# Adapt some default parameter different for target types -> probably also different for a new use-case
-# color = switch(TYPE, "CLASS" = twocol, "REGR" = hexcol, "MULTICLASS" = threecol) #probably need to change MULTICLASS opt
-# cutoff = switch(TYPE, "CLASS" = 0.1, "REGR"  = 0.9, "MULTICLASS" = 0.9) #need to adapt
-# ylim = switch(TYPE, "CLASS" = NULL, "REGR"  = c(0,2.5e2), "MULTICLASS" = NULL) #need to adapt in regression case
-# min_width = switch(TYPE, "CLASS" = 0, "REGR"  = 0, "MULTICLASS" = 0.2) # need to adapt in multiclass case
-'
+
 
 ########################################################################################################################
 # ETL
@@ -71,10 +58,10 @@ summary(as.factor(df_orig$holiday))
 # Create artificial targets
 df_orig = df_orig %>%
   mutate(cnt_REGR = log(cnt + 1),
-         cnt_CLASS = cut(cnt, breaks = c(-Inf, quantile(cnt, 0.8), Inf), 
-                              labels = c("0_low", "1_high")),
-         cnt_MULTICLASS = cut(cnt, breaks = c(-Inf, quantile(df_orig$cnt, c(0.8, 0.95)), Inf),
-                                   labels = c("0_low", "1_high", "2_very_high")))
+         cnt_CLASS = factor(cut(cnt, breaks = c(-Inf, quantile(cnt, 0.8), Inf), 
+                                labels = c("0_low", "1_high"))),
+         cnt_MULTICLASS = factor(cut(cnt, breaks = c(-Inf, quantile(df_orig$cnt, c(0.8, 0.95)), Inf),
+                                     labels = c("0_low", "1_high", "2_very_high"))))
 
 # Check some stuff
 skip = function() {
@@ -119,10 +106,9 @@ setdiff(df_meta_sub$variable, colnames(df))
 
 # --- Define train/test/util-fold --------------------------------------------------------------------------------------
 set.seed(42)
-df = df %>% mutate(fold = if_else(kaggle_fold == "train",
+df = df %>% mutate(fold = factor(if_else(kaggle_fold == "train",
                                   if_else(sample(10, nrow(.), TRUE) == 1, "util", "train"),
-                                  kaggle_fold
-))
+                                  kaggle_fold)))
 summary(as.factor(df$fold))
 
 
@@ -137,6 +123,8 @@ df[nume] = map(df[nume], ~ as.numeric(.))
 my_summary(df[nume])
 
 
+
+
 # --- Missings + Outliers + Skewness -----------------------------------------------------------------------------------
 
 # Remove features with too many missings
@@ -148,47 +136,15 @@ nume = setdiff(nume, remove)
 # Plot untransformed features -> check for outliers and skewness
 my_summary(df[nume])
 start = Sys.time()
-if (PLOT) {
-  plots = map(nume, 
-              ~ plot_nume_CLASS(df[c(., "cnt_CLASS")], 
-                                       feature_name = .x, 
-                                       target_name = "cnt_CLASS", 
-                                       title = .x
-  ))
-  ggsave(paste0(PLOTLOC, "distr_nume.pdf"), 
-         arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+for (TARGET_TYPE in TARGET_TYPES) {
+  if (PLOT) {
+    plots = map(nume, ~ plot_feature_target(df, feature_name = .x, target_name = paste0("cnt_", TARGET_TYPE), 
+                                            title = .x))
+    ggsave(paste0(PLOTLOC, "1__distr_nume_orig__", TARGET_TYPE, ".pdf"), 
+           arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+  }
 }
 print(Sys.time() - start)
-
-
-
-feature_name = "temp"
-target_name = "cnt_REGR"
-title = NULL
-
-df_plot = df[c(feature_name, target_name)]
-summary(df_plot)
-ggplot(data = df_plot, 
-       aes_string(x = feature_name, 
-                  y = target_name)) +
-  geom_hex(bins = 100) + 
-  #scale_fill_gradientn(colors = colorRampPalette(c("white", "blue", "yellow", "red"))(100)) +
-  geom_smooth(color = "black", level = 0.95, size = 0.5) +
-  labs(title = if (is.null(title)) feature_name else title)
-
-p = ggplot(data = df_plot, 
-           aes_string(x = feature_name)) +
-  geom_histogram(aes_string(y = "..density..",
-                            fill = target_name, 
-                            color = target_name),
-                 bins = n_bins, 
-                 position = "identity") +
-  geom_density(aes_string(color = target_name)) +
-  scale_fill_manual(values = alpha(color, .4), name = target_name) + 
-  scale_color_manual(values = color, name = target_name) +
-  theme_my +
-  #guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE))
-  labs(title = title)
 
 # Winsorize
 df[nume] = map_df(df[nume], ~ winsorize(., 0.01, 0.99))
@@ -215,42 +171,47 @@ my_summary(df[nume_binned])
 
 
 # --- Final feature information ----------------------------------------------------------------------------------------
-'
-# Univariate variable performances
-varperf_nume = df[nume + nume_BINNED].swifter.progress_bar(False).apply(
-    lambda x: (up.variable_performance(feature=x, 
-                                       target=df["cnt_" + TARGET_TYPE],
-                                       splitter=ShuffleSplit(n_splits=1, test_size=0.2, random_state=42),
-                                       scorer=up.D_SCORER[TARGET_TYPE]["spear" if TARGET_TYPE == "REGR" 
-                                                                       else "auc"])))
-print(varperf_nume.sort_values(ascending=False))
-# RRRR
-(varimp_metr = (filterVarImp(map_df(df[metr], ~ impute(.)), df$target, nonpara = TRUE) %>% rowMeans() %>% 
-                  .[order(., decreasing = TRUE)] %>% round(2)))
 
-# Plot
-if PLOT:
-    _ = up.plot_l_calls(pdf_path=f"{s.PLOTLOC}1__distr_nume__{TARGET_TYPE}.pdf",
-                        l_calls=[(up.plot_feature_target,
-                                  dict(feature=df[feature], target=df["cnt_" + TARGET_TYPE],
-                                       title=f"{feature} (VI:{varperf_nume[feature]: 0.2f})",
-                                       regplot_type="lowess",
-                                       add_miss_info=True if feature in nume else False))
-                                 for feature in up.interleave(nume, nume_BINNED)])
+for (TARGET_TYPE in TARGET_TYPES) {
+  #TARGET_TYPE = "REGR"
+  
+  # Univariate variable performances
+  # TODO: write own one without imputation xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  df_tmp = df[c(c(rbind(nume, nume_binned)), paste0("cnt_", TARGET_TYPE))]
+  df_tmp[nume_binned] = map_df(df[nume_binned], ~ factor(.))
+  (varperf_nume = (caret::filterVarImp(map_df(df_tmp[c(rbind(nume, nume_binned))], ~ impute(.)), 
+                                       df_tmp[[paste0("cnt_", TARGET_TYPE)]], 
+                                       nonpara = TRUE) %>% 
+                     rowMeans() %>% 
+                     .[order(., decreasing = TRUE)]))
+  print(varperf_nume[order(varperf_nume, decreasing = TRUE)])
 
-'
+  
+  # Plot
+  if (PLOT) {
+    plots = map(c(rbind(nume, nume_binned)), 
+                ~ plot_feature_target(df, 
+                                      feature_name = .x, 
+                                      target_name = paste0("cnt_", TARGET_TYPE), 
+                                      title = paste0(.x, " (VI: ",format(varperf_nume[.x], digits = 2), ")")))
+    # add_miss_info=True if feature in nume else False))
+    ggsave(paste0(PLOTLOC, "1__distr_nume__", TARGET_TYPE, ".pdf"),
+           arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+  }
+}
+
+
 # --- Removing variables (inlcuding correlation analysis) --------------------------------------------------------------
 
 # Remove leakage features
 remove = c("xxx", "xxx")
-nume = setdiff(nume, "xxx")
-
+nume = setdiff(nume, remove)
 
 # Remove highly/perfectly correlated (the ones with less NA!)
-# Plot correlation
 my_summary(df[nume])
-p = plot_corr(df[nume], method = "spearman", cutoff = 0)
-ggsave(paste0(PLOTLOC, "1__corr_nume.pdf"), p, width = 9, height = 9)
+ggsave(paste0(PLOTLOC, "1__corr_nume.pdf"), 
+       plot_corr(df[nume], method = "spearman", cutoff = 0),
+       width = 9, height = 9)
 remove = c("atemp") #put at xxx the variables to remove
 nume = setdiff(nume, remove) #remove
 nume_binned = setdiff(nume_binned, paste0(remove,"_BINNED")) #keep "binned" version in sync
@@ -261,32 +222,30 @@ nume_binned = setdiff(nume_binned, paste0(remove,"_BINNED")) #keep "binned" vers
 # HINT: In case of having a detailed date variable, this can be used as regression target here as well!
 
 # Univariate variable importance
-'
-df$fold_test = factor(ifelse(df$fold == "test", "Y", "N"))
-(varimp_metr_fold = filterVarImp(df[metr], df$fold_test, nonpara = TRUE) %>% rowMeans() %>%
+(varperf_nume_fold = caret::filterVarImp(df[nume], df$fold, nonpara = TRUE) %>% rowMeans() %>%
     .[order(., decreasing = TRUE)] %>% round(2))
 
 # Plot: only variables with with highest importance
-metr_toprint = names(varimp_metr_fold)[varimp_metr_fold >= 0.52]
-options(warn = -1)
-plots = get_plot_distr_metr(df, metr_toprint, color = c("blue","red"), target_name = "fold_test", 
-                            missinfo = misspct, varimpinfo = varimp_metr_fold, ylim = ylim)
-ggsave(paste0(plotloc, TYPE, "_distr_metr_final_folddependency.pdf"), marrangeGrob(plots, ncol = 4, nrow = 2), 
-       width = 18, height = 12)
-options(warn = 0)
-'
+nume_toplot = names(varperf_nume_fold)[varperf_nume_fold >= 0.52]
+plots = map(nume_toplot, 
+            ~ plot_feature_target(df,
+                                  feature_name = .x, 
+                                  target_name = "fold", 
+                                  title = paste0(.x, " (VI: ",format(varperf_nume_fold[.x], digits = 2), ")")))
+ggsave(paste0(PLOTLOC, "1__distr_nume_folddep.pdf"),
+       arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+
 
 # --- Create missing indicator and impute feature missings--------------------------------------------------------------
 
 (miss = nume[map_lgl(df[nume], ~ any(is.na(.)))])
 df[paste0("MISS_",miss)] = map(df[miss], ~ ifelse(is.na(.x), "No", "Yes"))
-summary(map_df(df[paste0("MISS_",miss)], ~ as.factor(.)))
+df[paste0("MISS_",miss)] %>% my_summary()
 
 # Impute missings
-'
-df[miss] = map(df[miss], ~ impute(., type = "random"))
-summary(df[metr]) 
-'
+df[miss] = map(df[miss], ~ impute(., type = "median"))
+df[nume] %>% my_summary()
+
 
 ########################################################################################################################
 # Categorical features: Explore and adapt
@@ -321,91 +280,116 @@ df[paste0(nomi, "_ENCODED")] =
                     right_join(df[.x] %>% mutate(n = row_number())) %>% 
                     arrange(n) %>% .$mean_target))
 
-
 # Create compact covariates for "too many members" columns 
 (levinfo = map_int(df[nomi], ~ length(unique(.))) %>% .[order(., decreasing = TRUE)]) #number of levels
 (toomany = names(levinfo)[which(levinfo > TOOMANY_THRESHOLD)])
 (toomany = setdiff(toomany, c("hr", "mnth", "weekday"))) #set exception for important variables
 df[toomany] = map(df[toomany], ~ fct_lump(., TOOMANY_THRESHOLD, other_level = "_OTHER_")) #collapse
 
-'
-# Univariate variable importance
-(varimp_nomi = filterVarImp(df[nomi], df$target, nonpara = TRUE) %>% rowMeans() %>% 
-    .[order(., decreasing = TRUE)] %>% round(2))
-'
 
-
-#GO HEEEEEEEEEEEEEEEEERE
-'
-# Check
-plots = suppressMessages(get_plot_distr_nomi(df, nomi, color = color, varimpinfo = varimp_nomi, inner_barplot = TRUE,
-                                             min_width = min_width, ylim = ylim))
-ggsave(paste0(plotloc,TYPE,"_distr_nomi.pdf"), marrangeGrob(plots, ncol = 3, nrow = 3), 
-       width = 18, height = 12)
-
-library(magrittr)
-df  %>% use_series("temp")
-
-# Removing variables ----------------------------------------------------------------------------------------------
-
-# Remove Self-features
-if (TYPE == "CLASS") nomi = setdiff(nomi, "boat_OTHER_")
-if (TYPE %in% c("REGR","MULTICLASS")) nomi = setdiff(nomi, "xxx")
-
-# Remove highly/perfectly (>=99%) correlated (the ones with less levels!) 
-plot = get_plot_corr(df, input_type = "nomi",  vars = setdiff(nomi, paste0("MISS_",miss)), cutoff = cutoff)
-ggsave(paste0(plotloc,TYPE,"_corr_nomi.pdf"), plot, width = 9, height = 9)
-if (TYPE %in% c("REGR","MULTICLASS")) {
-  plot = get_plot_corr(df, input_type = "nomi",  vars = paste0("MISS_",miss), cutoff = 0.98)
-  ggsave(paste0(plotloc,TYPE,"_corr_nomi_MISS.pdf"), plot, width = 9, height = 9)
-  nomi = setdiff(nomi, c("MISS_BsmtFin_SF_2","MISS_BsmtFin_SF_1","MISS_second_Flr_SF","MISS_Misc_Val_LOG_",
-                        "MISS_Mas_Vnr_Area","MISS_Garage_Yr_Blt","MISS_Garage_Area","MISS_Total_Bsmt_SF"))
+# --- Final variable information ---------------------------------------------------------------------------------------
+options(dplyr.summarise.inform = FALSE)
+for (TARGET_TYPE in c("CLASS", "MULTICLASS")) {
+  #TARGET_TYPE = "REGR"
+  
+  # Univariate variable importance
+  df_tmp = df[c(cate, paste0("MISS_", miss), paste0("cnt_", TARGET_TYPE))]
+  df_tmp[c(cate, paste0("MISS_", miss))] = map_df(df_tmp[c(cate, paste0("MISS_", miss))], ~ factor(.))
+  (varperf_cate = (caret::filterVarImp(df_tmp[c(cate, paste0("MISS_", miss))], 
+                                       df_tmp[[paste0("cnt_", TARGET_TYPE)]], 
+                                       nonpara = TRUE) %>% 
+                     rowMeans() %>% 
+                     .[order(., decreasing = TRUE)]))
+  print(varperf_cate[order(varperf_cate, decreasing = TRUE)])
+  
+  # Plot
+  if (PLOT) {
+    plots = map(c(cate, paste0("MISS_", miss)), 
+                ~ plot_feature_target(df, 
+                                      feature_name = .x, 
+                                      target_name = paste0("cnt_", TARGET_TYPE), 
+                                      title = paste0(.x, " (VI: ",format(varperf_cate[.x], digits = 2), ")")))
+    ggsave(paste0(PLOTLOC, "1__distr_cate__", TARGET_TYPE, ".pdf"),
+           arrange_plots(plots, ncol = 3, nrow = 2), width = 18, height = 12)
+  }
 }
 
 
+# Removing variables ----------------------------------------------------------------------------------------------
+
+# Remove leakage variables
+remove = c("xxx", "xxx")
+cate = setdiff(cate, remove)
+toomany = setdiff(toomany, remove)
+
+# Remove highly/perfectly correlated (the ones with less levels!)
+ggsave(paste0(PLOTLOC, "1__corr_cate.pdf"), 
+       plot_corr(df[c(cate, paste0("MISS_", miss))], method = "cramersv", cutoff = 0),
+       width = 9, height = 9)
+remove = c("xxx") #put at xxx the variables to remove
+cate = setdiff(cate, remove) #remove
 
 
 # Time/fold depedency --------------------------------------------------------------------------------------------
 
-# Hint: In case of having a detailed date variable this can be used as regression target here as well!
+# HINT: In case of having a detailed date variable, this can be used as regression target here as well!
 
 # Univariate variable importance
-(varimp_nomi_fold = filterVarImp(df[nomi], df$fold_test, nonpara = TRUE) %>% rowMeans() %>% 
-   .[order(., decreasing = TRUE)] %>% round(2))
+df_tmp = df[c(cate, paste0("MISS_", miss), "fold")]
+df_tmp[c(cate, paste0("MISS_", miss))] = map_df(df_tmp[c(cate, paste0("MISS_", miss))], ~ factor(.))
+(varperf_cate_fold = (caret::filterVarImp(df_tmp[c(cate, paste0("MISS_", miss))], 
+                                     df_tmp[["fold"]], 
+                                     nonpara = TRUE) %>% 
+                   rowMeans() %>% 
+                   .[order(., decreasing = TRUE)]))
 
-# Plot (Hint: one might want to filter just on variable importance with highest importance)
-nomi_toprint = names(varimp_nomi_fold)[varimp_nomi_fold >= 0.52]
-plots = get_plot_distr_nomi(df, nomi_toprint, color = c("blue","red"), target_name = "fold_test", inner_barplot = FALSE,
-                            varimpinfo = varimp_nomi_fold, ylim = ylim)
-ggsave(paste0(plotloc,TYPE,"_distr_nomi_folddependency.pdf"), marrangeGrob(plots, ncol = 4, nrow = 3), 
-       width = 18, height = 12)
-
-
-
-
-#######################################################################################################################-
-#|||| Prepare final data ||||----
-#######################################################################################################################-
-
-# Define final features ----------------------------------------------------------------------------------------
-
-features = c(metr, nomi)
-formula = as.formula(paste("target", "~ -1 + ", paste(features, collapse = " + ")))
-features_binned = c(metr_binned, setdiff(nomi, paste0("MISS_",miss))) #do not need indicators if binned variables
-formula_binned = as.formula(paste("target", "~ ", paste(features_binned, collapse = " + ")))
-
-# Check
-summary(df[features])
-setdiff(features, colnames(df))
-summary(df[features_binned])
-setdiff(features_binned, colnames(df))
+# Plot: only variables with with highest importance
+cate_toplot = names(varperf_cate_fold)[varperf_cate_fold >= 0.52]
+plots = map(cate_toplot, ~ plot_feature_target(df,
+                                               feature_name = .x, 
+                                               target_name = "fold", 
+                                               title = paste0(.x, " (VI: ",format(varperf_cate_fold[.x], 
+                                                                                  digits = 2), ")")))
+ggsave(paste0(PLOTLOC, "1__distr_cate_folddep.pdf"),
+       arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
 
 
 
+########################################################################################################################
+# Prepare final data
+########################################################################################################################
 
-# Save image ----------------------------------------------------------------------------------------------------------
-rm(df.orig, plots, plots1, plots2)
-save.image(paste0(TYPE,"_1_explore.rdata"))
-'
+# --- Define final features --------------------------------------------------------------------------------------------
 
+# Standard: can be used together by all algorithms
+nume_standard = c(nume, paste0(toomany, "_ENCODED"))
+cate_standard = c(cate, paste0("MISS_", miss))
+
+# Binned: can be used by elasticnet (without any numeric features) to mimic non-linear numeric effects
+features_binned = c(setdiff(paste0(nume, "_BINNED"), onebin), cate)
+
+# Encoded: can be used as complete feature-set for deeplearning (as bad with one-hot encoding)
+# or lightgbm (with additionally denoting encoded features as "categorical")
+features_encoded = unique(c(nume, paste0(cate, "_ENCODED"), paste0("MISS_", miss, "_ENCODED")))
+
+# Check again
+all_features = unique(c(nume_standard, cate_standard, features_binned, features_encoded))
+setdiff(all_features, colnames(df))
+setdiff(colnames(df), all_features)
+
+
+# --- Remove "burned" data -----------------------------------------------------------------------------------------------
+
+df = df %>% filter(fold != 'util')
+
+
+# --- Save image -------------------------------------------------------------------------------------------------------
+
+# Clean up
+graphics.off()
+rm(df_orig)
+
+# Serialize
+save("df", "nume_standard", "cate_standard", "features_binned", "features_encoded",
+     file = paste0(DATALOC, "1_explore.Rdata"))
 
