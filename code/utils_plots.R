@@ -56,6 +56,7 @@ my_summary = function(df) {
   df %>% mutate(across(where(is.character), as.factor)) %>% summary()
 }
 
+
 # Cramers V
 cramersv = function(x, y) {
   result = sqrt(suppressWarnings(chisq.test(x, y, correct=FALSE)$statistic) / 
@@ -63,6 +64,7 @@ cramersv = function(x, y) {
   names(result) = "cramersv"
   result
 }
+
 
 # Percentage format
 percent_format = function(x, digits = 2) {trimws(paste0(format(100 * x, digits = digits, nsmall = digits), "%"))}
@@ -81,6 +83,7 @@ winsorize = function(variable, lower = NULL, upper = NULL) {
   variable
 }
 
+
 ## Impute
 impute = function(variable, type = "median") {
   i.na = which(is.na(variable))
@@ -93,12 +96,78 @@ impute = function(variable, type = "median") {
   variable 
 }
 
+
 # switch row and col spec
 arrange_plots = function(grobs, ncol, nrow, ...) {
   gridExtra::marrangeGrob(grobs, ncol, nrow, 
                layout_matrix = t(matrix(seq_len(nrow * ncol), ncol, nrow)),
                ...)
 }
+
+
+# TBD
+feature_target_correlation = function(df, feature_name, target_name, feature_type = NULL, target_type = NULL, 
+                                      calc_cramersv = FALSE) {
+  # Determine feature and target type
+  if (is.null(feature_type)) {
+    feature_type = if (is.numeric(df[[feature_name]])) "nume" else "cate"
+  }
+  if (is.null(target_type)) {
+    target_type = if (is.numeric(df[[target_name]])) "REGR" else {
+      if (length(unique(df[[target_name]])) == 2) "CLASS" else "MULTICLASS"
+    }
+  }
+  
+  # Calc correlation
+  if (feature_type == "nume") {
+    if (target_type == "REGR") {
+      # Spearman correlation
+      correlation = df[c(feature_name, target_name)] %>% drop_na() %>% 
+        cor(method = "spearman") %>% .[1,2] %>% abs()
+    } else {
+      if (!calc_cramersv) {
+        # Spearman correlation of feature with feature-mean of target_class 
+        correlation = df[c(feature_name, target_name)] %>% drop_na() %>% 
+        group_by_at(target_name) %>% mutate(mean_per_class = mean(.data[[feature_name]])) %>% ungroup() %>% 
+        select_at(c(feature_name, "mean_per_class")) %>% 
+        cor(method = "spearman") %>% .[1,2] %>% abs
+      } else {
+        # CramersV of binned feature with target
+        correlation = df[c(feature_name, target_name)] %>% drop_na() %>% 
+          mutate(!!feature_name := as.character(cut(.data[[feature_name]], 
+                                                   unique(quantile(.data[[feature_name]], seq(0, 1, 0.2), 
+                                                                   na.rm = TRUE)), 
+                                                   include.lowest = TRUE))) %>% 
+          (function(x) cramersv(x[[feature_name]], x[[target_name]]))
+      }
+    }                
+  } else {
+    if (target_type == "REGR") {
+      if (!calc_cramersv) {
+        # Spearman correlation of target with target-mean of feature-level 
+        correlation = df[c(feature_name, target_name)] %>% drop_na() %>% 
+          group_by_at(feature_name) %>% mutate(mean_per_class = mean(.data[[target_name]])) %>% ungroup() %>% 
+          select_at(c(target_name, "mean_per_class")) %>% 
+          cor(method = "spearman") %>% .[1,2] %>% abs
+      } else {
+        # CramersV of binned target with feature
+        correlation = df[c(feature_name, target_name)] %>% drop_na() %>% 
+          mutate(!!target_name := as.character(cut(.data[[target_name]], 
+                                                    unique(quantile(.data[[target_name]], seq(0, 1, 0.2), 
+                                                                    na.rm = TRUE)), 
+                                                    include.lowest = TRUE))) %>% 
+          (function(x) cramersv(x[[feature_name]], x[[target_name]]))
+      }
+    } else {
+      # CramersV
+      correlation = df[c(feature_name, target_name)] %>% drop_na() %>% 
+        (function(x) cramersv(x[[feature_name]], x[[target_name]]))
+    }
+  }
+  names(correlation) = feature_name
+  correlation
+}
+
 
 # Remove missings
 helper_adapt_feature_target = function(df, feature_name, target_name, verbose = TRUE) {
@@ -111,6 +180,7 @@ helper_adapt_feature_target = function(df, feature_name, target_name, verbose = 
   df_plot = df %>% filter((!is.na(.data[[feature_name]]) & (!is.na(.data[[target_name]])))) 
   return(list(df_plot = df_plot, pct_miss_feature = pct_miss_feature))
 }
+
 
 # TBD
 helper_inner_barplot = function(p, df, feature_name, inner_ratio = 0.2, coord_flip = FALSE) {
@@ -141,6 +211,7 @@ helper_inner_barplot = function(p, df, feature_name, inner_ratio = 0.2, coord_fl
   p
 }
 
+# TBD
 helper_calc_barboxwidth = function(df, feature_name, target_name, min_width = 0.2) {
 
   df %>% group_by_at(c(feature_name, target_name)) %>% summarise(n = n()) %>% ungroup() %>% 
@@ -155,6 +226,7 @@ helper_calc_barboxwidth = function(df, feature_name, target_name, min_width = 0.
              paste0(.data[[feature_name]], " (", percent_format(pct, 1), ")")) # format feature_name
 
 }
+
 
 # TBD
 plot_cate_CLASS = function(df, feature_name, target_name,
@@ -229,9 +301,11 @@ plot_cate_CLASS = function(df, feature_name, target_name,
   p
 }
 
+
 plot_cate_MULTICLASS = function(...) {
   plot_cate_CLASS(multiclass_target = TRUE, ...)
 }
+
 
 plot_cate_REGR = function(df, feature_name, target_name,
                           title = NULL,
@@ -346,9 +420,11 @@ plot_nume_CLASS = function(df, feature_name, target_name,
   p
 }
 
+
 plot_nume_MULTICLASS = function(...) {
   plot_nume_CLASS(...)
 }
+
 
 plot_nume_REGR = function(df, feature_name, target_name,
                           title = NULL, 
@@ -463,6 +539,7 @@ plot_nume_REGR = function(df, feature_name, target_name,
   p
 }
 
+
 # TBD
 plot_feature_target = function(df, feature_name, target_name, feature_type = NULL, target_type = NULL, ...) {
   
@@ -490,7 +567,7 @@ plot_feature_target = function(df, feature_name, target_name, feature_type = NUL
   }
 }
 
-
+# Plot correlation
 plot_corr = function(df, method, absolute = TRUE, cutoff = None) {
   #df = df[nume]; method = "spearman"; absolute = TRUE; cutoff = 0.1;  text_color = "white"
 

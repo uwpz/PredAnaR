@@ -20,7 +20,6 @@ PLOT = TRUE
 # Constants
 TARGET_TYPES = c("REGR", "CLASS", "MULTICLASS")
 MISSPCT_THRESHOLD = 0.95
-VARPERF_THRESHOLD_DATADRIFT = 0.53
 TOOMANY_THRESHOLD = 5
 
 
@@ -173,19 +172,14 @@ my_summary(df[nume_binned])
 # --- Final feature information ----------------------------------------------------------------------------------------
 
 for (TARGET_TYPE in TARGET_TYPES) {
-  #TARGET_TYPE = "REGR"
+  #TARGET_TYPE = "CLASS"
   
-  # Univariate variable performances
-  # TODO: write own one without imputation xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  df_tmp = df[c(c(rbind(nume, nume_binned)), paste0("cnt_", TARGET_TYPE))]
-  df_tmp[nume_binned] = map_df(df[nume_binned], ~ factor(.))
-  (varperf_nume = (caret::filterVarImp(map_df(df_tmp[c(rbind(nume, nume_binned))], ~ impute(.)), 
-                                       df_tmp[[paste0("cnt_", TARGET_TYPE)]], 
-                                       nonpara = TRUE) %>% 
-                     rowMeans() %>% 
-                     .[order(., decreasing = TRUE)]))
-  print(varperf_nume[order(varperf_nume, decreasing = TRUE)])
-
+  # Univariate correlation with target
+  corr_nume = unlist(map(c(rbind(nume, nume_binned)), 
+                         ~ feature_target_correlation(df, 
+                                                      feature_name = .x, target_name = paste0("cnt_", TARGET_TYPE),
+                                                      calc_cramersv = FALSE)))
+  print(corr_nume[order(corr_nume, decreasing = TRUE)])
   
   # Plot
   if (PLOT) {
@@ -193,7 +187,7 @@ for (TARGET_TYPE in TARGET_TYPES) {
                 ~ plot_feature_target(df, 
                                       feature_name = .x, 
                                       target_name = paste0("cnt_", TARGET_TYPE), 
-                                      title = paste0(.x, " (VI: ",format(varperf_nume[.x], digits = 2), ")")))
+                                      title = paste0(.x, " (Corr: ",format(corr_nume[.x], digits = 2), ")")))
     # add_miss_info=True if feature in nume else False))
     ggsave(paste0(PLOTLOC, "1__distr_nume__", TARGET_TYPE, ".pdf"),
            arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
@@ -221,17 +215,19 @@ nume_binned = setdiff(nume_binned, paste0(remove,"_BINNED")) #keep "binned" vers
 
 # HINT: In case of having a detailed date variable, this can be used as regression target here as well!
 
-# Univariate variable importance
-(varperf_nume_fold = caret::filterVarImp(df[nume], df$fold, nonpara = TRUE) %>% rowMeans() %>%
-    .[order(., decreasing = TRUE)] %>% round(2))
+# Univariate variable correlation
+corr_nume_fold = unlist(map(nume, 
+                       ~ feature_target_correlation(df, feature_name = .x, target_name = "fold", 
+                                                    calc_cramersv = FALSE)))
+print(corr_nume_fold[order(corr_nume_fold, decreasing = TRUE)])
 
-# Plot: only variables with with highest importance
-nume_toplot = names(varperf_nume_fold)[varperf_nume_fold >= 0.52]
+# Plot: only variables with with highest correlation
+nume_toplot = names(corr_nume_fold)[corr_nume_fold >= 0.05]
 plots = map(nume_toplot, 
             ~ plot_feature_target(df,
                                   feature_name = .x, 
                                   target_name = "fold", 
-                                  title = paste0(.x, " (VI: ",format(varperf_nume_fold[.x], digits = 2), ")")))
+                                  title = paste0(.x, " (CORR: ",format(corr_nume_fold[.x], digits = 2), ")")))
 ggsave(paste0(PLOTLOC, "1__distr_nume_folddep.pdf"),
        arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
 
@@ -289,18 +285,14 @@ df[toomany] = map(df[toomany], ~ fct_lump(., TOOMANY_THRESHOLD, other_level = "_
 
 # --- Final variable information ---------------------------------------------------------------------------------------
 options(dplyr.summarise.inform = FALSE)
-for (TARGET_TYPE in c("CLASS", "MULTICLASS")) {
-  #TARGET_TYPE = "REGR"
-  
-  # Univariate variable importance
-  df_tmp = df[c(cate, paste0("MISS_", miss), paste0("cnt_", TARGET_TYPE))]
-  df_tmp[c(cate, paste0("MISS_", miss))] = map_df(df_tmp[c(cate, paste0("MISS_", miss))], ~ factor(.))
-  (varperf_cate = (caret::filterVarImp(df_tmp[c(cate, paste0("MISS_", miss))], 
-                                       df_tmp[[paste0("cnt_", TARGET_TYPE)]], 
-                                       nonpara = TRUE) %>% 
-                     rowMeans() %>% 
-                     .[order(., decreasing = TRUE)]))
-  print(varperf_cate[order(varperf_cate, decreasing = TRUE)])
+for (TARGET_TYPE in TARGET_TYPES) {
+
+  # Univariate correlation with target
+  corr_cate = unlist(map(c(cate, paste0("MISS_", miss)), 
+                         ~ feature_target_correlation(df, 
+                                                      feature_name = .x, target_name = paste0("cnt_", TARGET_TYPE),
+                                                      calc_cramersv = FALSE)))
+  print(corr_cate[order(corr_cate, decreasing = TRUE)])
   
   # Plot
   if (PLOT) {
@@ -308,7 +300,7 @@ for (TARGET_TYPE in c("CLASS", "MULTICLASS")) {
                 ~ plot_feature_target(df, 
                                       feature_name = .x, 
                                       target_name = paste0("cnt_", TARGET_TYPE), 
-                                      title = paste0(.x, " (VI: ",format(varperf_cate[.x], digits = 2), ")")))
+                                      title = paste0(.x, " (Corr: ",format(corr_cate[.x], digits = 2), ")")))
     ggsave(paste0(PLOTLOC, "1__distr_cate__", TARGET_TYPE, ".pdf"),
            arrange_plots(plots, ncol = 3, nrow = 2), width = 18, height = 12)
   }
@@ -333,22 +325,17 @@ cate = setdiff(cate, remove) #remove
 # Time/fold depedency --------------------------------------------------------------------------------------------
 
 # HINT: In case of having a detailed date variable, this can be used as regression target here as well!
-
 # Univariate variable importance
-df_tmp = df[c(cate, paste0("MISS_", miss), "fold")]
-df_tmp[c(cate, paste0("MISS_", miss))] = map_df(df_tmp[c(cate, paste0("MISS_", miss))], ~ factor(.))
-(varperf_cate_fold = (caret::filterVarImp(df_tmp[c(cate, paste0("MISS_", miss))], 
-                                     df_tmp[["fold"]], 
-                                     nonpara = TRUE) %>% 
-                   rowMeans() %>% 
-                   .[order(., decreasing = TRUE)]))
+corr_cate_fold = unlist(map(c(cate, paste0("MISS_", miss)), 
+                            ~ feature_target_correlation(df, feature_name = .x, target_name = "fold")))
+print(corr_cate_fold[order(corr_cate_fold, decreasing = TRUE)])
 
 # Plot: only variables with with highest importance
-cate_toplot = names(varperf_cate_fold)[varperf_cate_fold >= 0.52]
+cate_toplot = names(corr_cate_fold)[corr_cate_fold >= 0.5]
 plots = map(cate_toplot, ~ plot_feature_target(df,
                                                feature_name = .x, 
                                                target_name = "fold", 
-                                               title = paste0(.x, " (VI: ",format(varperf_cate_fold[.x], 
+                                               title = paste0(.x, " (Corr: ",format(corr_cate_fold[.x], 
                                                                                   digits = 2), ")")))
 ggsave(paste0(PLOTLOC, "1__distr_cate_folddep.pdf"),
        arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
