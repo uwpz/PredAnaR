@@ -127,18 +127,6 @@ winsorize = function(variable, lower = NULL, upper = NULL) {
 
 
 
-## Impute
-impute = function(variable, type = "random") {
-  i.na = which(is.na(variable))
-  if (length(i.na)) {
-    variable[i.na] = switch(type, 
-        "random" = sample(variable[-i.na], length(i.na) , replace = TRUE) ,
-        "median" = median(variable[-i.na], na.rm = TRUE),
-        "zero" = 0)
-  }
-  variable 
-}
-
 
 
 

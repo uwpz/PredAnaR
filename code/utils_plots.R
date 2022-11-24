@@ -12,13 +12,11 @@ library(tidyverse)
 #library(tidyverse)
 
 # Theme
-theme_up <- theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+theme_up = theme_bw() + theme(plot.title = element_text(hjust = 0.5), 
+                              plot.subtitle = element_text(hjust = 0.5),
+                              plot.caption = element_text(hjust = 0))
 
 # Colors
-COLORDEFAULT = c(
-  "#0173b2", "#de8f05", "#029e73", "#d55e00", "#cc78bc", "#ca9161",
-  "#fbafe4", "#949494", "#ece133", "#56b4e9"
-)
 COLORDEFAULT = c(
   "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
   "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
@@ -192,24 +190,29 @@ helper_inner_barplot = function(p, df, feature_name, inner_ratio = 0.2, coord_fl
     theme_void()
   
   # Put all together
-  x_range = ggplot_build(p)$layout$panel_params[[1]]$x.range
+  p_build = ggplot_build(p)
+  x_range = p_build$layout$panel_params[[1]]$x.range
+  x_breaks = as.numeric(p_build$layout$panel_params[[1]]$x$get_labels())
   if (coord_flip) {
     p = p + 
-      scale_y_continuous(limits = c(x_range[1] - inner_ratio*(x_range[2] - x_range[1]), NA)) +
+      scale_y_continuous(limits = c(x_range[1] - inner_ratio*(x_range[2] - x_range[1]), NA),
+                         breaks = x_breaks[between(x_breaks, x_range[1], x_range[2])]) +
       theme_up +
       annotation_custom(ggplotGrob(p_inner), 
                         xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = -0.05*(x_range[2] - x_range[1])) +
       geom_hline(yintercept = 0, colour = "black")
   } else {
     p = p + 
-      scale_x_continuous(limits = c(x_range[1] - inner_ratio*(x_range[2] - x_range[1]), NA)) +
+      scale_x_continuous(limits = c(x_range[1] - inner_ratio*(x_range[2] - x_range[1]), NA),
+                         breaks = x_breaks[between(x_breaks, x_range[1], x_range[2])]) +
       theme_up +
       annotation_custom(ggplotGrob(p_inner), 
-                        ymin = -Inf, ymax = Inf, xmin = -Inf, xmax = -0.05*(x_range[2] - x_range[1])) +
-      geom_vline(xintercept = 0, colour = "black")
+                        ymin = -Inf, ymax = Inf, xmin = -Inf, xmax = x_range[1] - 0.05*(x_range[2] - x_range[1])) +
+      geom_vline(xintercept = x_range[1], colour = "black")
   }
   p
 }
+
 
 # TBD
 helper_calc_barboxwidth = function(df, feature_name, target_name, min_width = 0.2) {
