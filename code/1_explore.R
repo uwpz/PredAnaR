@@ -106,7 +106,7 @@ setdiff(df_meta_sub$variable, colnames(df))
 # --- Define train/test/util-fold --------------------------------------------------------------------------------------
 set.seed(42)
 df = df %>% mutate(fold = factor(if_else(kaggle_fold == "train",
-                                  if_else(sample(10, nrow(.), TRUE) == 1, "util", "train"),
+                                  if_else(sample(10, n_rows(.), TRUE) == 1, "util", "train"),
                                   kaggle_fold)))
 summary(as.factor(df$fold))
 
@@ -140,7 +140,7 @@ for (TARGET_TYPE in TARGET_TYPES) {
     plots = map(nume, ~ plot_feature_target(df, feature_name = .x, target_name = paste0("cnt_", TARGET_TYPE), 
                                             title = .x))
     ggsave(paste0(PLOTLOC, "1__distr_nume_orig__", TARGET_TYPE, ".pdf"), 
-           arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+           arrange_plots(plots, n_cols = 4, n_rows = 2), width = 18, height = 12)
   }
 }
 print(Sys.time() - start)
@@ -156,11 +156,10 @@ nume = map_chr(nume, ~ ifelse(. %in% tolog, paste0(.,"_LOG"), .)) #adapt metadat
 
 # --- Create categorical (binned) equivalents for all numeric features (for linear models to mimic non-linearity) ------
 
+# Bin variables
 nume_binned = paste0(nume,"_BINNED")
-df[nume_binned] = map_df(df[nume], ~ {
-  as.character(cut(., unique(quantile(., seq(0, 1, 0.2), na.rm = TRUE)), include.lowest = TRUE))  
-})
-
+df[nume_binned] = map_df(df[nume], ~ bin(.))
+  
 # Convert missings to own level ("(Missing)")
 df[nume_binned] = map_df(df[nume_binned], ~ replace_na(., "(Missing)"))  # fct_explicit_na
 my_summary(df[nume_binned])
@@ -190,7 +189,7 @@ for (TARGET_TYPE in TARGET_TYPES) {
                                       title = paste0(.x, " (Corr: ",format(corr_nume[.x], digits = 2), ")")))
     # add_miss_info=True if feature in nume else False))
     ggsave(paste0(PLOTLOC, "1__distr_nume__", TARGET_TYPE, ".pdf"),
-           arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+           arrange_plots(plots, n_cols = 4, n_rows = 2), width = 18, height = 12)
   }
 }
 
@@ -229,7 +228,7 @@ plots = map(nume_toplot,
                                   target_name = "fold", 
                                   title = paste0(.x, " (CORR: ",format(corr_nume_fold[.x], digits = 2), ")")))
 ggsave(paste0(PLOTLOC, "1__distr_nume_folddep.pdf"),
-       arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+       arrange_plots(plots, n_cols = 4, n_rows = 2), width = 18, height = 12)
 
 
 # --- Create missing indicator and impute feature missings--------------------------------------------------------------
@@ -302,7 +301,7 @@ for (TARGET_TYPE in TARGET_TYPES) {
                                       target_name = paste0("cnt_", TARGET_TYPE), 
                                       title = paste0(.x, " (Corr: ",format(corr_cate[.x], digits = 2), ")")))
     ggsave(paste0(PLOTLOC, "1__distr_cate__", TARGET_TYPE, ".pdf"),
-           arrange_plots(plots, ncol = 3, nrow = 2), width = 18, height = 12)
+           arrange_plots(plots, n_cols = 3, n_rows = 2), width = 18, height = 12)
   }
 }
 
@@ -338,7 +337,7 @@ plots = map(cate_toplot, ~ plot_feature_target(df,
                                                title = paste0(.x, " (Corr: ",format(corr_cate_fold[.x], 
                                                                                   digits = 2), ")")))
 ggsave(paste0(PLOTLOC, "1__distr_cate_folddep.pdf"),
-       arrange_plots(plots, ncol = 4, nrow = 2), width = 18, height = 12)
+       arrange_plots(plots, n_cols = 4, n_rows = 2), width = 18, height = 12)
 
 
 
