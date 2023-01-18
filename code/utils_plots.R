@@ -298,7 +298,7 @@ plot_cate_CLASS = function(df, feature_name, target_name,
   # Reflines
   if (add_refline) {
     df_refs = df_plot %>% group_by_at(target_name) %>% summarise(n = n()) %>% ungroup %>% 
-      mutate(pct = n / sum(), cumpct = cumsum(n)/sum(n))
+      mutate(pct = n / sum(n), cumpct = cumsum(n)/sum(n))
     if (!multiclass_target) {
       refs = df_refs %>% filter(.data[[target_name]] == target_category) %>% pull(pct)
     } else {
