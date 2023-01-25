@@ -292,7 +292,7 @@ plot_cate_CLASS = function(df, feature_name, target_name,
   if (add_miss_info) {
     p = p + xlab(paste0(p$labels$x, " (", percent_format(pct_miss_feature), " NA)"))
   } else {
-    p = p + ylab("")
+    p = p + xlab("")
   }
   
   # Reflines
