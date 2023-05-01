@@ -95,10 +95,18 @@ impute = function(variable, type = "median") {
 }
 
 
+# Bin
+bin = function(x, k = 5) {
+  x_binned = cut(x, unique(quantile(x, seq(0, 1, 1/k), na.rm = TRUE)), include.lowest = TRUE)
+  levels(x_binned) = paste(paste0("q", 1:length(levels(x_binned))), levels(x_binned))
+  as.character(x_binned)
+}
+
+
 # switch row and col spec
-arrange_plots = function(grobs, ncol, nrow, ...) {
-  gridExtra::marrangeGrob(grobs, ncol, nrow, 
-               layout_matrix = t(matrix(seq_len(nrow * ncol), ncol, nrow)),
+arrange_plots = function(grobs, n_cols, n_rows, ...) {
+  gridExtra::marrangeGrob(grobs, ncol = n_cols, nrow = n_rows, 
+               layout_matrix = t(matrix(seq_len(n_rows * n_cols), n_cols, n_rows)),
                ...)
 }
 
@@ -241,7 +249,8 @@ plot_cate_CLASS = function(df, feature_name, target_name,
                            add_refline = TRUE,
                            color = COLORDEFAULT,
                            alpha = 0.5,
-                           verbose = TRUE) {
+                           verbose = TRUE,
+                           ...) {
 
   # Adapt df
   l_tmp = helper_adapt_feature_target(df[c(feature_name, target_name)], feature_name, target_name, verbose)
@@ -289,7 +298,7 @@ plot_cate_CLASS = function(df, feature_name, target_name,
   # Reflines
   if (add_refline) {
     df_refs = df_plot %>% group_by_at(target_name) %>% summarise(n = n()) %>% ungroup %>% 
-      mutate(pct = n / sum(), cumpct = cumsum(n)/sum(n))
+      mutate(pct = n / sum(n), cumpct = cumsum(n)/sum(n))
     if (!multiclass_target) {
       refs = df_refs %>% filter(.data[[target_name]] == target_category) %>% pull(pct)
     } else {
@@ -318,7 +327,8 @@ plot_cate_REGR = function(df, feature_name, target_name,
                           add_refline = TRUE,
                           color = COLORDEFAULT,
                           alpha = 0.5,
-                          verbose = TRUE) {
+                          verbose = TRUE,
+                          ...) {
   
   # Adapt df
   l_tmp = helper_adapt_feature_target(df[c(feature_name, target_name)], feature_name, target_name, verbose)
@@ -346,7 +356,7 @@ plot_cate_REGR = function(df, feature_name, target_name,
   if (add_miss_info) {
     p = p + ylab(paste0(p$labels$y, " (", percent_format(pct_miss_feature), " NA)"))
   } else {
-    p = p + xlab("")
+    p = p + ylab("")
   }
   p
   
@@ -370,7 +380,8 @@ plot_nume_CLASS = function(df, feature_name, target_name,
                            n_bins = 20, 
                            color = COLORDEFAULT,
                            alpha = 0.3,
-                           verbose = TRUE) {
+                           verbose = TRUE,
+                           ...) {
   
   # Adapt df
   l_tmp = helper_adapt_feature_target(df[c(feature_name, target_name)], feature_name, target_name, verbose)
@@ -431,11 +442,11 @@ plot_nume_MULTICLASS = function(...) {
 
 plot_nume_REGR = function(df, feature_name, target_name,
                           title = NULL, 
-                          add_regplot = TRUE, add_miss_info = TRUE, add_legend = TRUE,
+                          add_regplot = TRUE, color_regplot = "red", add_miss_info = TRUE, add_legend = TRUE,
                           inner_ratio = 0.2, 
                           add_feature_distribution = TRUE, add_target_distribution = TRUE, n_bins = 20,
-                          colormap = colorRampPalette(c("lightgrey", "blue", "yellow"))(100), 
-                          verbose = TRUE) {
+                          hex_plot = TRUE, colormap = colorRampPalette(c("lightgrey", "blue", "yellow"))(100), 
+                          verbose = TRUE, ...) {
   
   # Adapt df
   l_tmp = helper_adapt_feature_target(df[c(feature_name, target_name)], feature_name, target_name, verbose)
@@ -452,13 +463,16 @@ plot_nume_REGR = function(df, feature_name, target_name,
   # Heatmap
   p = ggplot(data = df_plot, 
              mapping = aes(x = .data[[feature_name]], 
-                           y = .data[[target_name]])) +
-    geom_hex(show.legend = add_legend) + 
-    scale_fill_gradientn(colors = colormap) +
-    #geom_point(alpha = alpha) + 
-    labs(title = title) + 
+                           y = .data[[target_name]]))
+  if (hex_plot == TRUE) {
+    p = p + geom_hex(show.legend = add_legend) +
+      scale_fill_gradientn(colors = colormap)
+  } else {
+    p = p + geom_point()
+  }
+  p = p + labs(title = title) + 
     theme_up 
-  if (add_regplot) {p = p + geom_smooth(color = "red", fill = "red", level = 0.95, size = 1)}
+  if (add_regplot) {p = p + geom_smooth(color = color_regplot, fill = color_regplot, level = 0.95, size = 1)}
   if (add_miss_info) {p = p + xlab(paste0(p$labels$x, " (", percent_format(pct_miss_feature), " NA)"))}
   
   # Get plot dimension
@@ -609,7 +623,7 @@ plot_corr = function(df, method, absolute = TRUE, cutoff = None) {
   # Filter out rows or cols below cutoff and then fill diagonal
   for (i in seq_along(df_corr)) {df_corr[i,i] = 0}
   if (!is.null(cutoff)) {
-    b_cutoff = map_lgl(df_corr, ~ (max(abs(.)) > cutoff)) %>% as.logical()
+    b_cutoff = map_lgl(df_corr, ~ (max(abs(.), na.rm = TRUE) > cutoff)) %>% as.logical()
     df_corr = df_corr[b_cutoff, b_cutoff]
   }
   for (i in seq_along(df_corr)) {df_corr[i,i] = 1}
