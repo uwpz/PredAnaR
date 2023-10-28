@@ -324,6 +324,7 @@ plot_cate_REGR = function(df, feature_name, target_name,
                           add_miss_info = FALSE,
                           inner_ratio = 0.2, 
                           min_width = 0.2, 
+                          add_violin = FALSE,
                           add_refline = TRUE,
                           color = COLORDEFAULT,
                           alpha = 0.5,
@@ -344,13 +345,18 @@ plot_cate_REGR = function(df, feature_name, target_name,
                                       feature_name, "dummy", min_width = min_width) %>% 
                 select_at(c(feature_name, paste0(feature_name, "_fmt"))))
   
-  # Barplot
+  # Boxplot
   p = ggplot(data = df_plot,
              mapping = aes(y = .data[[paste0(feature_name, "_fmt")]], x = .data[[target_name]])) +
     geom_boxplot(varwidth = TRUE) +
     stat_summary(fun = mean, geom = "point", shape = 4) +
     labs(title = title) +
     theme_up
+  
+  if (add_violin) {
+    p = p + geom_violin(fill = NA) 
+
+  }
   
   # Adapt axis label
   if (add_miss_info) {
