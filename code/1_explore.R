@@ -106,7 +106,7 @@ setdiff(df_meta_sub$variable, colnames(df))
 # --- Define train/test/util-fold --------------------------------------------------------------------------------------
 set.seed(42)
 df = df %>% mutate(fold = factor(if_else(kaggle_fold == "train",
-                                  if_else(sample(10, n_rows(.), TRUE) == 1, "util", "train"),
+                                  if_else(sample(10, nrow(.), TRUE) == 1, "util", "train"),
                                   kaggle_fold)))
 summary(as.factor(df$fold))
 
