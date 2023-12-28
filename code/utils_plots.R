@@ -21,7 +21,7 @@ COLORDEFAULT = c(
   "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
   "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
 )
-# color = COLORDEFAULT; barplot(1:length(color), col = color)
+#color = COLORMANY; barplot(1:length(color), col = color)
 
 
 ########################################################################################################################
@@ -319,6 +319,7 @@ plot_cate_MULTICLASS = function(...) {
 }
 
 
+
 plot_cate_REGR = function(df, feature_name, target_name,
                           title = NULL,
                           add_miss_info = FALSE,
@@ -326,13 +327,18 @@ plot_cate_REGR = function(df, feature_name, target_name,
                           min_width = 0.2, 
                           add_violin = FALSE,
                           add_refline = TRUE,
+                          col_color = NULL,
                           color = COLORDEFAULT,
                           alpha = 0.5,
                           verbose = TRUE,
                           ...) {
   
   # Adapt df
-  l_tmp = helper_adapt_feature_target(df[c(feature_name, target_name)], feature_name, target_name, verbose)
+  cols = c(feature_name, target_name)
+  if (!is.null(col_color)) {
+    if (col_color != feature_name) cols = c(cols, col_color)
+  }
+  l_tmp = helper_adapt_feature_target(df[cols], feature_name, target_name, verbose)
   df_plot = l_tmp$df_plot
   pct_miss_feature = l_tmp$pct_miss_feature
   
@@ -353,9 +359,12 @@ plot_cate_REGR = function(df, feature_name, target_name,
     labs(title = title) +
     theme_up
   
+  if (!is.null(col_color)) {
+    p = p + geom_jitter(aes(color = .data[[col_color]])) + scale_color_manual(values = color)
+  }
+  
   if (add_violin) {
-    p = p + geom_violin(fill = NA) 
-
+    p = p + geom_violin(fill = NA, color = "grey") 
   }
   
   # Adapt axis label
@@ -452,10 +461,15 @@ plot_nume_REGR = function(df, feature_name, target_name,
                           inner_ratio = 0.2, 
                           add_feature_distribution = TRUE, add_target_distribution = TRUE, n_bins = 20,
                           hex_plot = TRUE, colormap = colorRampPalette(c("lightgrey", "blue", "yellow"))(100), 
+                          col_color = NULL, color = COLORDEFAULT,
                           verbose = TRUE, ...) {
   
   # Adapt df
-  l_tmp = helper_adapt_feature_target(df[c(feature_name, target_name)], feature_name, target_name, verbose)
+  cols = c(feature_name, target_name)
+  if (!is.null(col_color)) {
+    if (col_color != feature_name) cols = c(cols, col_color)
+  }
+  l_tmp = helper_adapt_feature_target(df[cols], feature_name, target_name, verbose)
   
   # Subset
   df_plot = l_tmp$df_plot
@@ -474,7 +488,8 @@ plot_nume_REGR = function(df, feature_name, target_name,
     p = p + geom_hex(show.legend = add_legend) +
       scale_fill_gradientn(colors = colormap)
   } else {
-    p = p + geom_point()
+    p = p + geom_point(mapping = if (!is.null(col_color)) aes(color = .data[[col_color]]) else NULL) +
+      scale_color_manual(values = color)
   }
   p = p + labs(title = title) + 
     theme_up 
@@ -591,7 +606,7 @@ plot_feature_target = function(df, feature_name, target_name, feature_type = NUL
 }
 
 # Plot correlation
-plot_corr = function(df, method, absolute = TRUE, cutoff = None) {
+plot_corr = function(df, method, absolute = TRUE, cutoff = NULL) {
   #df = df[nume]; method = "spearman"; absolute = TRUE; cutoff = 0.1;  text_color = "white"
 
   # Check for mixed types
@@ -635,9 +650,8 @@ plot_corr = function(df, method, absolute = TRUE, cutoff = None) {
   for (i in seq_along(df_corr)) {df_corr[i,i] = 1}
   
   # Cluster df_corr
-  #library(corrplot)
-  #new_order = corrMatOrder(df_corr %>% as.matrix() , order = "hclust")
-  #df_corr = df_corr[new_order, new_order]
+  new_order = corrplot::corrMatOrder(df_corr %>% as.matrix() , order = "hclust")
+  df_corr = df_corr[new_order, new_order]
   
   # Plot
   df_plot = df_corr %>% 
@@ -649,7 +663,8 @@ plot_corr = function(df, method, absolute = TRUE, cutoff = None) {
     geom_tile(aes(fill = corr)) + 
     geom_text(aes(label = round(corr, 2), 
                   colour = textcolor)) +
-    scale_fill_gradient(low = "white", high = "darkred") +
+    {if (absolute) scale_fill_gradient(low = "white", high = "darkred") else 
+      scale_fill_gradient2(low = "darkblue", mid = "white", high = "darkred")} +
     scale_x_discrete(limits = colnames(df_corr)) +
     scale_y_discrete(limits = rev(colnames(df_corr))) +
     scale_color_manual(values = c("black", "white")) +
