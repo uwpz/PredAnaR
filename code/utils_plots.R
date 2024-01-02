@@ -42,13 +42,24 @@ debug_test = function(a=1, b=1) {
 
 # --- Non-plots --------------------------------------------------------------------------------------------------------
 
-# Summary
+#' Standard summary with characters as factors
+#'
+#' @param data Data frame for summary.
+#' @return Summary of the data frame with characters converted to factors.
+#' @examples
+#' my_summary(data.frame(a = c("x", "y", "z"), b = c(1, 2, 3)))
 my_summary = function(df) {
   df %>% mutate(across(where(is.character), as.factor)) %>% summary()
 }
 
 
-# Cramers V
+#' Calculate Cramers V between two vectors
+#'
+#' @param x Variable 1.
+#' @param y Variable 2.
+#'
+#' @return Cramer's V value.
+#'
 cramersv = function(x, y) {
   result = sqrt(suppressWarnings(chisq.test(x, y, correct=FALSE)$statistic) / 
                   (length(x) * (min(length(unique(x)),length(unique(y))) - 1)))
@@ -57,11 +68,26 @@ cramersv = function(x, y) {
 }
 
 
-# Percentage format
-percent_format = function(x, digits = 2) {trimws(paste0(format(100 * x, digits = digits, nsmall = digits), "%"))}
+#' Percentage format
+#'
+#' @param x Numeric vector to be formatted as a percentage.
+#' @param n Number of decimal places (Default = 2).
+#' @return Formatted percentage string.
+#' @examples
+#' format_pct(0.75) # Returns "75.00%"
+percent_format = function(x, digits = 2) {
+  trimws(paste0(format(100 * x, digits = digits, nsmall = digits), "%"))
+}
 
 
-# Winsorize
+#' Winsorize on either or both edges of numeric variable
+#'
+#' @param variable Numeric vector to winsorize.
+#' @param lower Lower quantile (optional).
+#' @param upper Upper quantile (optional).
+#'
+#' @return Winsorized vector.
+#'
 winsorize = function(variable, lower = NULL, upper = NULL) {
   if (!is.null(lower)) {
     q_lower = quantile(variable, lower, na.rm = TRUE)
@@ -75,7 +101,13 @@ winsorize = function(variable, lower = NULL, upper = NULL) {
 }
 
 
-## Impute
+#' Impute
+#'
+#' @param variable Numeric vector to impute.
+#' @param type Imputation type, "median", "random", or "zero" (Default = "median").
+#'
+#' @return Imputed vector.
+#'
 impute = function(variable, type = "median") {
   i.na = which(is.na(variable))
   if (length(i.na)) {
@@ -88,7 +120,14 @@ impute = function(variable, type = "median") {
 }
 
 
-# Bin
+#' Bin
+#'
+#' @param x Numeric vector to be binned.
+#' @param k Number of bins (Default = 5).
+#' @return Character vector representing the bins.
+#' @examples
+#' bin(c(1, 2, 3, 4, 5, 6), k = 3) # Returns c(q1 [1,2.67], q1 [1,2.67], q2 (2.67,4.33],
+#' q2 (2.67,4.33], q3 (4.33,6], q3 (4.33,6])
 bin = function(x, k = 5) {
   x_binned = cut(x, unique(quantile(x, seq(0, 1, 1/k), na.rm = TRUE)), include.lowest = TRUE)
   levels(x_binned) = paste(paste0("q", 1:length(levels(x_binned))), levels(x_binned))
@@ -96,15 +135,33 @@ bin = function(x, k = 5) {
 }
 
 
-# switch row and col spec
-arrange_plots = function(grobs, n_cols, n_rows, ...) {
+#' Helper function: Arrange plots by row first
+#'
+#' @param grobs List of plots to be arranged.
+#' @param n_cols Number of columns in the arrangement (Default = 1).
+#' @param n_rows Number of rows in the arrangement (Default = 1).
+#' @return Arranged plots (by row first, then columns).
+#' @examples
+#' plots <- list(ggplot(), ggplot(), ggplot())
+#' arrange_plots(plots, n_cols = 2, n_rows = 2)
+arrange_plots = function(grobs, n_cols = 1, n_rows = 1, ...) {
   gridExtra::marrangeGrob(grobs, ncol = n_cols, nrow = n_rows, 
                layout_matrix = t(matrix(seq_len(n_rows * n_cols), n_cols, n_rows)),
                ...)
 }
 
 
-# TBD
+#' Feature-Target Correlation
+#'
+#' @param df Data frame containing the feature and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param target_name Name of the target variable.
+#' @param feature_type Explicitly define type of the feature variable, "nume" or "cate" (optional).
+#' @param target_type Explicitly define of the target variable , "REGR", "CLASS", or "MULTICLASS" (optional)).
+#' @param calc_cramersv Logical, whether to calculate CramersV for categorical features (Default = FALSE).
+#'
+#' @return Feature-target correlation value.
+#'
 feature_target_correlation = function(df, feature_name, target_name, feature_type = NULL, target_type = NULL, 
                                       calc_cramersv = FALSE) {
   # Determine feature and target type
@@ -168,7 +225,15 @@ feature_target_correlation = function(df, feature_name, target_name, feature_typ
 }
 
 
-# Remove missings
+#' Helper: Adapt Feature-Target Data by removing missings and print message in case of missings
+#'
+#' @param df Data frame containing the features and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param target_name Name of the target variable.
+#' @param verbose Logical, whether to print progress messages (Default = TRUE).
+#'
+#' @return List containing the adapted data frame and percentage of missing feature values.
+#'
 helper_adapt_feature_target = function(df, feature_name, target_name, verbose = TRUE) {
   if (verbose) {print(paste0("Plotting ", feature_name, " vs. ", target_name))}
   n_target_miss = sum(is.na(df[[target_name]]))
@@ -181,7 +246,16 @@ helper_adapt_feature_target = function(df, feature_name, target_name, verbose = 
 }
 
 
-# TBD
+#' Helper: Inner Barplot
+#'
+#' @param p Original ggplot object.
+#' @param df Data frame containing the features and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param inner_ratio Ratio of inner plot size to the original plot size (Default = 0.2).
+#' @param coord_flip Logical, whether to flip coordinates in the inner plot (Default = FALSE).
+#'
+#' @return Modified ggplot object with an inner barplot.
+#'
 helper_inner_barplot = function(p, df, feature_name, inner_ratio = 0.2, coord_flip = FALSE) {
   df_plot = df %>% group_by_at(feature_name) %>% summarise(n = n()) %>% mutate(pct = n/ sum(n)) %>% ungroup()
   p_inner = ggplot(data = df_plot, 
@@ -215,7 +289,15 @@ helper_inner_barplot = function(p, df, feature_name, inner_ratio = 0.2, coord_fl
 }
 
 
-# TBD
+#' Helper: Calculate Bar-Box Width
+#'
+#' @param df Data frame containing the features and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param target_name Name of the target variable.
+#' @param min_width Minimum width for the bar-box (Default = 0.2).
+#'
+#' @return Data frame with calculated widths and formatted feature names.
+#'
 helper_calc_barboxwidth = function(df, feature_name, target_name, min_width = 0.2) {
 
   df %>% group_by_at(c(feature_name, target_name)) %>% summarise(n = n()) %>% ungroup() %>% 
@@ -232,7 +314,26 @@ helper_calc_barboxwidth = function(df, feature_name, target_name, min_width = 0.
 }
 
 
-# TBD
+#' Plot Categorical Feature against Binary Target
+#'
+#' @param df Data frame containing the feature and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param target_name Name of the target variable.
+#' @param target_category Specific target category to plot, for binary classification (optional).
+#' @param multiclass_target Logical, indicating whether the target is multiclass (Default = FALSE).
+#' @param title Custom title for the plot (optional).
+#' @param add_miss_info Logical, whether to add information about missing values (Default = FALSE).
+#' @param add_legend Logical, whether to add a legend, for multiclass target (Default = FALSE).
+#' @param inner_ratio Ratio of inner plot size to the original plot size (Default = 0.2).
+#' @param min_width Minimum width for the bar-box (Default = 0.2).
+#' @param add_refline Logical, whether to add reference lines (Default = TRUE).
+#' @param color Vector of colors for the plot (Default = COLORDEFAULT).
+#' @param alpha Transparency level for colors (Default = 0.5).
+#' @param verbose Logical, whether to print progress messages (Default = TRUE).
+#' @param ... Additional arguments to be passed to the function.
+#'
+#' @return ggplot object displaying the relationship between the feature and the target.
+#'
 plot_cate_CLASS = function(df, feature_name, target_name,
                            target_category = NULL, multiclass_target = FALSE,
                            title = NULL,
@@ -307,12 +408,36 @@ plot_cate_CLASS = function(df, feature_name, target_name,
 }
 
 
+#' Plot Categorical Feature against Multiclass Target
+#'
+#' @param ... Arguments passed to `plot_cate_CLASS`.
+#'
+#' @return ggplot object displaying the relationship between the feature and the target (multiclass version).
+#'
 plot_cate_MULTICLASS = function(...) {
   plot_cate_CLASS(multiclass_target = TRUE, ...)
 }
 
 
-
+#' Plot Categorical Features against Regression Target
+#'
+#' @param df Data frame containing the features and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param target_name Name of the target variable.
+#' @param title Custom title for the plot (optional).
+#' @param add_miss_info Logical, whether to add information about missing values (Default = FALSE).
+#' @param inner_ratio Ratio of inner plot size to the original plot size (Default = 0.2).
+#' @param min_width Minimum width for the bar-box (Default = 0.2).
+#' @param add_violin Logical, wether to add a violin plot (Default = FALSE).
+#' @param add_refline Logical, whether to add reference lines (Default = TRUE).
+#' @param col_color Name of grouping variable defining color of points (optional).
+#' @param color Vector of colors for the plot (Default = COLORDEFAULT).
+#' @param alpha Transparency level for colors (Default = 0.5).
+#' @param verbose Logical, whether to print progress messages (Default = TRUE).
+#' @param ... Additional arguments to be passed to the function.
+#'
+#' @return ggplot object displaying the relationship between the feature and the target.
+#'
 plot_cate_REGR = function(df, feature_name, target_name,
                           title = NULL,
                           add_miss_info = FALSE,
@@ -380,7 +505,23 @@ plot_cate_REGR = function(df, feature_name, target_name,
 }
   
 
-# plot distribution
+#' Plot Numeric Features against Binary Target
+#'
+#' @param df Data frame containing the features and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param target_name Name of the target variable.
+#' @param title Custom title for the plot (optional).
+#' @param add_miss_info Logical, whether to add information about missing values (Default = TRUE).
+#' @param add_legend Logical, whether to add a legend (Default = TRUE).
+#' @param inner_ratio Ratio of inner plot size to the original plot size (Default = 0.2).
+#' @param n_bins Number of bins for the histogram (Default = 20).
+#' @param color Vector of colors for the plot (Default = COLORDEFAULT).
+#' @param alpha Transparency level for colors (Default = 0.3).
+#' @param verbose Logical, whether to print progress messages (Default = TRUE).
+#' @param ... Additional arguments to be passed to the function.
+#'
+#' @return ggplot object displaying the distribution of the feature for a numeric target.
+#'
 plot_nume_CLASS = function(df, feature_name, target_name,
                            title = NULL,
                            add_miss_info = TRUE, add_legend = TRUE,
@@ -443,17 +584,49 @@ plot_nume_CLASS = function(df, feature_name, target_name,
 }
 
 
+#' Plot Numeric Features against Multiclass Target
+#'
+#' @param ... Arguments passed to `plot_nume_CLASS`.
+#'
+#' @return ggplot object displaying the distribution of the feature for a numeric target (multiclass version).
+#'
 plot_nume_MULTICLASS = function(...) {
   plot_nume_CLASS(...)
 }
 
 
+#' Plot Numeric Feature against Regression Target
+#'
+#' @param df Data frame containing the features and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param target_name Name of the target variable.
+#' @param title Custom title for the plot (optional).
+#' @param add_regplot Logical, whether to add a spline regression fit (Default = TRUE).
+#' @param color_regplot Color of regplot (Default = "red").
+#' @param add_miss_info Logical, whether to add information about missing values (Default = TRUE).
+#' @param add_legend Logical, whether to add a legend (Default = TRUE).
+#' @param inner_ratio Ratio of inner plot size to the original plot size.
+#' @param add_feature_distribution Logical, whether to add the feature distribution at bottom (Default = TRUE)
+#' @param add_target_distribution Logical, whether to add the target distribution at left side (Default = TRUE).
+#' @param n_bins Number of bins for feature and target distribution histogrem (Default = 20).
+#' @param hex_plot Logical, whether to plot a hex_plot instead of points (Default = TRUE).
+#' @param colormap Colormap to use for hexplot (Default = colorRampPalette(c("lightgrey", "blue", "yellow"))(100)).
+#' @param add_contour Logical, whether to add a contour plot (Default = FALSE).
+#' @param color_contour Color of contour lines (Default = "white")
+#' @param col_color Color variable for additional coloring of points. 
+#' @param color Vector of colors for the plot (Default = COLORDEFAULT).
+#' @param verbose Logical, whether to print progress messages.
+#' @param ... Additional arguments to be passed to the function.
+#'
+#' @return ggplot object displaying the relationship between the feature and the target for regression.
+#'
 plot_nume_REGR = function(df, feature_name, target_name,
                           title = NULL, 
                           add_regplot = TRUE, color_regplot = "red", add_miss_info = TRUE, add_legend = TRUE,
                           inner_ratio = 0.2, 
                           add_feature_distribution = TRUE, add_target_distribution = TRUE, n_bins = 20,
                           hex_plot = TRUE, colormap = colorRampPalette(c("lightgrey", "blue", "yellow"))(100), 
+                          add_contour = FALSE, color_contour = "white",
                           col_color = NULL, color = COLORDEFAULT,
                           verbose = TRUE, ...) {
   
@@ -484,6 +657,13 @@ plot_nume_REGR = function(df, feature_name, target_name,
     p = p + geom_point(mapping = if (!is.null(col_color)) aes(color = .data[[col_color]]) else NULL) +
       scale_color_manual(values = color)
   }
+  
+  # Contour lines
+  if (add_contour) {
+    p = p +geom_density2d(color = color_contour)
+  }
+  
+  # Ohter
   p = p + labs(title = title) + 
     theme_up 
   if (add_regplot) {p = p + geom_smooth(color = color_regplot, fill = color_regplot, level = 0.95, size = 1)}
@@ -571,7 +751,17 @@ plot_nume_REGR = function(df, feature_name, target_name,
 }
 
 
-# TBD
+#' Plot the Feature against Target 
+#'
+#' @param df Data frame containing the features and target variable.
+#' @param feature_name Name of the feature variable.
+#' @param target_name Name of the target variable.
+#' @param feature_type Explicitly define type of the feature variable, "nume" or "cate" (otional).
+#' @param target_type Explicitly define type of the target variable, "REGR", "CLASS", or "MULTICLASS" (optional).
+#' @param ... Additional arguments to be passed to the specific plot function.
+#'
+#' @return ggplot object displaying the relationship between the feature and the target.
+#'
 plot_feature_target = function(df, feature_name, target_name, feature_type = NULL, target_type = NULL, ...) {
   
   # Determine feature and target type
@@ -598,7 +788,16 @@ plot_feature_target = function(df, feature_name, target_name, feature_type = NUL
   }
 }
 
-# Plot correlation
+
+#' Plot Correlation Matrix
+#'
+#' @param df Data frame containing the features.
+#' @param method Method to calculate the correlation. Options: "pearson", "spearman", or "cramersv".
+#' @param absolute Logical, indicating whether to plot the absolute values of the correlation (Default = TRUE).
+#' @param cutoff Threshold for filtering out weak correlations. If NULL, no filtering is applied (optional).
+#'
+#' @return ggplot object displaying the correlation matrix.
+#'
 plot_corr = function(df, method, absolute = TRUE, cutoff = NULL) {
   #df = df[nume]; method = "spearman"; absolute = TRUE; cutoff = 0.1;  text_color = "white"
 

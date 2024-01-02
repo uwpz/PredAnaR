@@ -171,7 +171,7 @@ my_summary(df[nume_binned])
 # --- Final feature information ----------------------------------------------------------------------------------------
 
 for (TARGET_TYPE in TARGET_TYPES) {
-  #TARGET_TYPE = "CLASS"
+  #TARGET_TYPE = "REGR"
   
   # Univariate correlation with target
   corr_nume = unlist(map(c(rbind(nume, nume_binned)), 
