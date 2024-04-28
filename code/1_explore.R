@@ -7,10 +7,10 @@ rm(list = ls())
 
 # --- Libraries, settings, functions -----------------------------------------------------------------------------------
 
-library(tidyverse)
+library(dplyr)
+library(ggplot2)
 source("./code/init.R")
 source("./code/utils_plots.R")
-
 
 # --- Parameter --------------------------------------------------------------------------------------------------------
 
@@ -23,6 +23,7 @@ MISSPCT_THRESHOLD = 0.95
 TOOMANY_THRESHOLD = 5
 
 
+
 ########################################################################################################################
 # ETL
 ########################################################################################################################
@@ -31,18 +32,21 @@ TOOMANY_THRESHOLD = 5
 
 # Read data and adapt to be more readable
 df_orig = read_csv(paste0(DATALOC, "hour.csv")) %>%
-  mutate(season = recode(season, "1" = "1_winter", "2" = "2_spring", "3" = "3_summer", "4" = "4_fall"),         
+  mutate(season = recode(season, "1" = "1_winter", "2" = "2_spring", "3" = "3_summer", "4" = "4_fall"),
          yr = recode(yr, "0" = "2011", "1" = "2012"),
          workingday = recode(workingday, "0" = "No", "1" = "Yes"),
-         weathersit = recode(weathersit, "1" = "1_clear", "2" = "2_misty", "3" = "3_light rain",
-                                         "4" = "4_heavy rain")) %>% 
+         weathersit = recode(weathersit, 
+                             "1" = "1_clear", 
+                             "2" = "2_misty", "3" = "3_light rain", 
+                             "4" = "4_heavy rain")) %>% 
   mutate(weekday = str_c(as.character(weekday), str_sub(lubridate::wday(dteday, label = TRUE), 1, 3), sep = "_"),
          mnth = str_pad(as.character(mnth), 2, pad = "0"),
-         hr = str_pad(as.character(hr), 2, pad = "0")) %>% 
+         hr = str_pad(as.character(hr), 2, pad = "0")) %>%
   mutate(temp = temp * 47 - 8,
          atemp = atemp * 66 - 16,
          windspeed = windspeed * 67) %>%
   mutate(kaggle_fold = if_else(lubridate::day(dteday) >= 20, "test", "train"))
+
 
 # Create some artifacts helping to illustrate important concepts
 set.seed(42)
@@ -63,6 +67,7 @@ df_orig = df_orig %>%
                                      labels = c("0_low", "1_high", "2_very_high"))))
 
 # Check some stuff
+'
 skip = function() {
   
   map_chr(df_orig, class)
@@ -77,6 +82,7 @@ skip = function() {
   #fig, ax = plt.subplots(1,1)
   #up.plot_feature_target(ax, df_orig["windspeed"], df_orig["cnt_CLASS"])
 }
+'
 
 # "Save" orignial data
 write_csv(df_orig, paste0(DATALOC, "df_orig.csv"))
@@ -106,8 +112,8 @@ setdiff(df_meta_sub$variable, colnames(df))
 # --- Define train/test/util-fold --------------------------------------------------------------------------------------
 set.seed(42)
 df = df %>% mutate(fold = factor(if_else(kaggle_fold == "train",
-                                  if_else(sample(10, nrow(.), TRUE) == 1, "util", "train"),
-                                  kaggle_fold)))
+                                         if_else(sample(10, nrow(.), TRUE) == 1, "util", "train"),
+                                         kaggle_fold)))
 summary(as.factor(df$fold))
 
 
@@ -150,14 +156,16 @@ df[nume] = map_df(df[nume], ~ winsorize(., 0.01, 0.99))
 
 # Log-Transform
 tolog = c("hum")
-df[paste0(tolog,"_LOG")] = map(df[tolog], ~ {if(min(., na.rm=TRUE) == 0) log(. + min(., na.rm=TRUE)) else log(.)})
-nume = map_chr(nume, ~ ifelse(. %in% tolog, paste0(.,"_LOG"), .)) #adapt metadata (keep order)
+df[paste0(tolog, "_LOG")] = map(df[tolog], ~ {
+  if (min(., na.rm = TRUE) == 0) log(. + min(., na.rm = TRUE)) else log(.)
+})
+nume = map_chr(nume, ~ ifelse(. %in% tolog, paste0(., "_LOG"), .)) #adapt metadata (keep order)
 
 
 # --- Create categorical (binned) equivalents for all numeric features (for linear models to mimic non-linearity) ------
 
 # Bin variables
-nume_binned = paste0(nume,"_BINNED")
+nume_binned = paste0(nume, "_BINNED")
 df[nume_binned] = map_df(df[nume], ~ bin(.))
   
 # Convert missings to own level ("(Missing)")
@@ -186,7 +194,7 @@ for (TARGET_TYPE in TARGET_TYPES) {
                 ~ plot_feature_target(df, 
                                       feature_name = .x, 
                                       target_name = paste0("cnt_", TARGET_TYPE), 
-                                      title = paste0(.x, " (Corr: ",format(corr_nume[.x], digits = 2), ")")))
+                                      title = paste0(.x, " (Corr: ", format(corr_nume[.x], digits = 2), ")")))
     # add_miss_info=True if feature in nume else False))
     ggsave(paste0(PLOTLOC, "1__distr_nume__", TARGET_TYPE, ".pdf"),
            arrange_plots(plots, n_cols = 4, n_rows = 2), width = 18, height = 12)
@@ -207,7 +215,7 @@ ggsave(paste0(PLOTLOC, "1__corr_nume.pdf"),
        width = 9, height = 9)
 remove = c("atemp") #put at xxx the variables to remove
 nume = setdiff(nume, remove) #remove
-nume_binned = setdiff(nume_binned, paste0(remove,"_BINNED")) #keep "binned" version in sync
+nume_binned = setdiff(nume_binned, paste0(remove, "_BINNED")) #keep "binned" version in sync
 
 
 # --- Detect data drift (time/fold depedency of features) --------------------------------------------------------------
@@ -216,8 +224,8 @@ nume_binned = setdiff(nume_binned, paste0(remove,"_BINNED")) #keep "binned" vers
 
 # Univariate variable correlation
 corr_nume_fold = unlist(map(nume, 
-                       ~ feature_target_correlation(df, feature_name = .x, target_name = "fold", 
-                                                    calc_cramersv = FALSE)))
+                            ~ feature_target_correlation(df, feature_name = .x, target_name = "fold", 
+                                                         calc_cramersv = FALSE)))
 print(corr_nume_fold[order(corr_nume_fold, decreasing = TRUE)])
 
 # Plot: only variables with with highest correlation
@@ -226,7 +234,7 @@ plots = map(nume_toplot,
             ~ plot_feature_target(df,
                                   feature_name = .x, 
                                   target_name = "fold", 
-                                  title = paste0(.x, " (CORR: ",format(corr_nume_fold[.x], digits = 2), ")")))
+                                  title = paste0(.x, " (CORR: ", format(corr_nume_fold[.x], digits = 2), ")")))
 ggsave(paste0(PLOTLOC, "1__distr_nume_folddep.pdf"),
        arrange_plots(plots, n_cols = 4, n_rows = 2), width = 18, height = 12)
 
@@ -234,8 +242,8 @@ ggsave(paste0(PLOTLOC, "1__distr_nume_folddep.pdf"),
 # --- Create missing indicator and impute feature missings--------------------------------------------------------------
 
 (miss = nume[map_lgl(df[nume], ~ any(is.na(.)))])
-df[paste0("MISS_",miss)] = map(df[miss], ~ ifelse(is.na(.x), "No", "Yes"))
-df[paste0("MISS_",miss)] %>% my_summary()
+df[paste0("MISS_", miss)] = map(df[miss], ~ ifelse(is.na(.x), "No", "Yes"))
+df[paste0("MISS_", miss)] %>% my_summary()
 
 # Impute missings
 df[miss] = map(df[miss], ~ impute(., type = "median"))
@@ -268,12 +276,13 @@ df[paste0(yesno, "_ENCODED")] = map(df[yesno], ~ as.numeric(recode(., "No" = "0"
 
 # Create target-encoded features for nominal variables
 nomi = setdiff(cate, c(ordi, yesno))
-df[paste0(nomi, "_ENCODED")] = 
-    map(nomi, ~ (df %>% filter(fold == "util") %>% 
-                    group_by_at(.x) %>% summarise(mean_target = mean(.data[["cnt_REGR"]])) %>% 
-                    ungroup() %>% arrange(desc(mean_target)) %>% 
-                    right_join(df[.x] %>% mutate(n = row_number())) %>% 
-                    arrange(n) %>% .$mean_target))
+df[paste0(nomi, "_ENCODED")] = map(nomi, ~ (
+  df %>% filter(fold == "util") %>% 
+    group_by_at(.x) %>% summarise(mean_target = mean(.data[["cnt_REGR"]])) %>% ungroup() %>% 
+    arrange(desc(mean_target)) %>% 
+    right_join(df[.x] %>% mutate(n = row_number())) %>% 
+    arrange(n) %>% .$mean_target
+))
 
 # Create compact covariates for "too many members" columns 
 (levinfo = map_int(df[nomi], ~ length(unique(.))) %>% .[order(., decreasing = TRUE)]) #number of levels
@@ -299,7 +308,7 @@ for (TARGET_TYPE in TARGET_TYPES) {
                 ~ plot_feature_target(df, 
                                       feature_name = .x, 
                                       target_name = paste0("cnt_", TARGET_TYPE), 
-                                      title = paste0(.x, " (Corr: ",format(corr_cate[.x], digits = 2), ")")))
+                                      title = paste0(.x, " (Corr: ", format(corr_cate[.x], digits = 2), ")")))
     ggsave(paste0(PLOTLOC, "1__distr_cate__", TARGET_TYPE, ".pdf"),
            arrange_plots(plots, n_cols = 3, n_rows = 2), width = 18, height = 12)
   }
@@ -334,8 +343,8 @@ cate_toplot = names(corr_cate_fold)[corr_cate_fold >= 0.5]
 plots = map(cate_toplot, ~ plot_feature_target(df,
                                                feature_name = .x, 
                                                target_name = "fold", 
-                                               title = paste0(.x, " (Corr: ",format(corr_cate_fold[.x], 
-                                                                                  digits = 2), ")")))
+                                               title = paste0(.x, " (Corr: ", format(corr_cate_fold[.x],
+                                                                                     digits = 2), ")")))
 ggsave(paste0(PLOTLOC, "1__distr_cate_folddep.pdf"),
        arrange_plots(plots, n_cols = 4, n_rows = 2), width = 18, height = 12)
 
@@ -364,9 +373,9 @@ setdiff(all_features, colnames(df))
 setdiff(colnames(df), all_features)
 
 
-# --- Remove "burned" data -----------------------------------------------------------------------------------------------
+# --- Remove "burned" data ---------------------------------------------------------------------------------------------
 
-df = df %>% filter(fold != 'util')
+df = df %>% filter(fold != "util")
 
 
 # --- Save image -------------------------------------------------------------------------------------------------------
@@ -378,4 +387,3 @@ rm(df_orig)
 # Serialize
 save("df", "nume_standard", "cate_standard", "features_binned", "features_encoded",
      file = paste0(DATALOC, "1_explore.Rdata"))
-

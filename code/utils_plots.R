@@ -2,7 +2,8 @@
 # Libraries, Parameter
 ########################################################################################################################
 
-library(tidyverse)
+library(dplyr)
+library(ggplot2)
 
 # Theme
 theme_up = theme_bw() + theme(plot.title = element_text(hjust = 0.5), 
@@ -23,13 +24,13 @@ COLORDEFAULT = c(
 
 # --- General ----------------------------------------------------------------------------------------------------------
 
-debug_test = function(a=1, b=1) {
+debug_test = function(a = 1, b = 1) {
   print("start")
-  a=2
+  a = 2
   browser()
   if (TRUE) {
     print("start of if")
-    b=2
+    b = 2
     print("end of if")
   }
   print("end")
@@ -61,8 +62,8 @@ my_summary = function(df) {
 #' @return Cramer's V value.
 #'
 cramersv = function(x, y) {
-  result = sqrt(suppressWarnings(chisq.test(x, y, correct=FALSE)$statistic) / 
-                  (length(x) * (min(length(unique(x)),length(unique(y))) - 1)))
+  result = sqrt(suppressWarnings(chisq.test(x, y, correct = FALSE)$statistic) / 
+                  (length(x) * (min(length(unique(x)), length(unique(y))) - 1)))
   names(result) = "cramersv"
   result
 }
@@ -109,11 +110,11 @@ winsorize = function(variable, lower = NULL, upper = NULL) {
 #' @return Imputed vector.
 #'
 impute = function(variable, type = "median") {
-  i.na = which(is.na(variable))
-  if (length(i.na)) {
-    variable[i.na] = switch(type, 
-                            "median" = median(variable[-i.na], na.rm = TRUE),
-                            "random" = sample(variable[-i.na], length(i.na) , replace = TRUE) ,
+  i_na = which(is.na(variable))
+  if (length(i_na)) {
+    variable[i_na] = switch(type, 
+                            "median" = median(variable[-i_na], na.rm = TRUE),
+                            "random" = sample(variable[-i_na], length(i_na) , replace = TRUE) ,
                             "zero" = 0)
   }
   variable 
@@ -257,10 +258,10 @@ helper_adapt_feature_target = function(df, feature_name, target_name, verbose = 
 #' @return Modified ggplot object with an inner barplot.
 #'
 helper_inner_barplot = function(p, df, feature_name, inner_ratio = 0.2, coord_flip = FALSE) {
-  df_plot = df %>% group_by_at(feature_name) %>% summarise(n = n()) %>% mutate(pct = n/ sum(n)) %>% ungroup()
+  df_plot = df %>% group_by_at(feature_name) %>% summarise(n = n()) %>% mutate(pct = n/sum(n)) %>% ungroup()
   p_inner = ggplot(data = df_plot, 
                    mapping = aes(x = .data[[feature_name]], y = pct)) +
-    geom_bar(stat= "identity", fill = "lightgrey", colour = "black", width = 0.9) +
+    geom_bar(stat = "identity", fill = "lightgrey", colour = "black", width = 0.9) +
     coord_flip() +
     theme_void()
   
@@ -374,7 +375,7 @@ plot_cate_CLASS = function(df, feature_name, target_name,
   p = ggplot(data = df_ggplot,
              mapping = aes(x = .data[[paste0(feature_name, "_fmt")]], y = .data[["y"]], fill = .data[[target_name]])) +
     geom_bar(stat = "identity", 
-             position = if (!multiclass_target) "stack" else position_fill(reverse=TRUE),
+             position = if (!multiclass_target) "stack" else position_fill(reverse = TRUE),
              width = 0.9 * df_ggplot$w, color = "black",
              show.legend = if (multiclass_target) TRUE else FALSE) +
     scale_fill_manual(values = alpha(color, alpha)) +
@@ -660,7 +661,7 @@ plot_nume_REGR = function(df, feature_name, target_name,
   
   # Contour lines
   if (add_contour) {
-    p = p +geom_density2d(color = color_contour)
+    p = p + geom_density2d(color = color_contour)
   }
   
   # Ohter
@@ -744,7 +745,7 @@ plot_nume_REGR = function(df, feature_name, target_name,
   # Hide intersection
   if (add_feature_distribution & add_target_distribution) {
     p = p + annotate("rect", xmin = -Inf, xmax = x_range[1], ymin = -Inf, ymax = y_range[1], 
-                     fill="white", color="black")
+                     fill="white", color = "black")
   }
   
   p
@@ -816,15 +817,14 @@ plot_corr = function(df, method, absolute = TRUE, cutoff = NULL) {
     if (!(method %in% c("cramersv"))) {stop("False method for categorical values: Choose cramersv")}
     k = dim(df)[2]
     df_corr = data.frame(matrix(0, k, k)) %>% magrittr::set_colnames(colnames(df))
-    for (i in 1:(k-1)) {
-      for (j in (i+1):k) {
+    for (i in 1:(k - 1)) {
+      for (j in (i + 1):k) {
         #print(paste0(i,"...", j))
         df_corr[i, j] = cramersv(df[[i]],df[[j]])# adapt with cramersv
         df_corr[j, i] = df_corr[i, j]
       }
     }
-    suffix = paste0(" (", + map_int(df, ~length(unique(.))), ")")
-    
+    suffix = paste0(" (", map_int(df, ~length(unique(.))), ")")
   }
   
   # Add info to names

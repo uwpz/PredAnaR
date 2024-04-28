@@ -1,4 +1,4 @@
-#source("renv/activate.R")
+
 #options(vsc.plot = FALSE)
 #Sys.setlocale("LC_TIME", "English")
 
@@ -10,3 +10,4 @@
 
 options(renv.config.mran.enabled = FALSE)
 source("renv/activate.R")
+.libPaths(c(.libPaths(), "C:/ProgramData/R/R-4.2.3/library"))
