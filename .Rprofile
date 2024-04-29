@@ -10,4 +10,4 @@
 
 options(renv.config.mran.enabled = FALSE)
 source("renv/activate.R")
-.libPaths(c(.libPaths(), "C:/ProgramData/R/R-4.2.3/library"))
+.libPaths(c(.libPaths(), "C:/ProgramData/R/R-4.2.3/library", "C:/my_install/R-4.2.3/library"))
